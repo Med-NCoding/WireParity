@@ -14,8 +14,9 @@ export type IRParameterLocation = "path" | "query" | "header" | "cookie";
 export type IRQueryStyle = "form" | "spaceDelimited" | "pipeDelimited" | "deepObject";
 export type IRPathStyle = "simple" | "matrix" | "label";
 export type IRHeaderStyle = "simple";
+export type IRCookieStyle = "form";
 
-export type IRParameterStyle = IRQueryStyle | IRPathStyle | IRHeaderStyle;
+export type IRParameterStyle = IRQueryStyle | IRPathStyle | IRHeaderStyle | IRCookieStyle;
 
 export interface IRParameter {
   name: string;
