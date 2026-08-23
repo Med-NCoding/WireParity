@@ -23,21 +23,85 @@ import type {
 const HTTP_METHODS: IRHttpMethod[] = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"];
 
 /**
+ * Structured error thrown when an OpenAPI spec fails root validation.
+ * Contains a `field` indicating which spec field caused the failure.
+ */
+export class OpenAPIParseError extends Error {
+  constructor(
+    message: string,
+    public readonly field?: string
+  ) {
+    super(message);
+    this.name = "OpenAPIParseError";
+  }
+}
+
+/**
+ * Validates the root structure of an OpenAPI 3.0.x or 3.1.x specification.
+ * Throws OpenAPIParseError with a descriptive message and field reference on any violation.
+ */
+export function validateOpenAPIRoot(rawSpec: unknown): OpenAPISpecRaw {
+  if (!rawSpec || typeof rawSpec !== "object" || Array.isArray(rawSpec)) {
+    throw new OpenAPIParseError(
+      "Invalid OpenAPI specification: root must be a non-null object",
+      "root"
+    );
+  }
+
+  const doc = rawSpec as Record<string, unknown>;
+
+  // Validate 'openapi' version field
+  if (!("openapi" in doc)) {
+    throw new OpenAPIParseError(
+      "Missing required field 'openapi' (expected \"3.0.x\" or \"3.1.x\")",
+      "openapi"
+    );
+  }
+  if (typeof doc.openapi !== "string") {
+    throw new OpenAPIParseError(
+      "Field 'openapi' must be a string (expected \"3.0.x\" or \"3.1.x\")",
+      "openapi"
+    );
+  }
+  const versionMatch = /^(3\.0\.\d+|3\.1\.\d+)$/.exec(doc.openapi);
+  if (!versionMatch) {
+    throw new OpenAPIParseError(
+      `Unsupported OpenAPI version "${doc.openapi}". WireParity supports OpenAPI 3.0.x and 3.1.x only.`,
+      "openapi"
+    );
+  }
+
+  // Validate 'info' block
+  if (!("info" in doc) || !doc.info || typeof doc.info !== "object" || Array.isArray(doc.info)) {
+    throw new OpenAPIParseError(
+      "Missing or invalid required field 'info'",
+      "info"
+    );
+  }
+  const info = doc.info as Record<string, unknown>;
+
+  if (!("title" in info) || typeof info.title !== "string" || info.title.trim() === "") {
+    throw new OpenAPIParseError(
+      "Missing or empty required field 'info.title'",
+      "info.title"
+    );
+  }
+  if (!("version" in info) || typeof info.version !== "string" || info.version.trim() === "") {
+    throw new OpenAPIParseError(
+      "Missing or empty required field 'info.version'",
+      "info.version"
+    );
+  }
+
+  return rawSpec as OpenAPISpecRaw;
+}
+
+/**
  * Parses an OpenAPI 3.0 or 3.1 specification object into WireParity IRDocument.
+ * Performs strict root validation before processing; throws OpenAPIParseError on failure.
  */
 export function parseOpenAPISpec(rawSpec: unknown): IRDocument {
-  if (!rawSpec || typeof rawSpec !== "object") {
-    throw new Error("Invalid OpenAPI specification: expected an object");
-  }
-
-  const doc = rawSpec as OpenAPISpecRaw;
-  if (!doc.openapi || typeof doc.openapi !== "string") {
-    throw new Error("Missing or invalid 'openapi' version field in specification");
-  }
-
-  if (!doc.info || !doc.info.title) {
-    throw new Error("Missing 'info.title' in OpenAPI specification");
-  }
+  const doc = validateOpenAPIRoot(rawSpec);
 
   const resolver = new OpenAPIRefResolver(doc);
   const servers = doc.servers?.map((s) => s.url) ?? ["/"];
@@ -206,14 +270,16 @@ function parseSchema(schemaRaw: SchemaRaw | RefRaw, resolver: OpenAPIRefResolver
     };
   }
 
-  // OpenAPI 3.1 type array (e.g. `type: ["string", "null"]`)
+  // OpenAPI 3.1: type may be an array e.g. ["string", "null"] or ["integer", "null"]
   let typeStr: string | undefined;
   let isNullable = s.nullable ?? false;
 
   if (Array.isArray(s.type)) {
+    // 3.1 style: null in the type array means nullable
     if (s.type.includes("null")) {
       isNullable = true;
     }
+    // Pick the first non-null type as the canonical type
     typeStr = s.type.find((t) => t !== "null");
   } else {
     typeStr = s.type;
@@ -234,43 +300,63 @@ function parseSchema(schemaRaw: SchemaRaw | RefRaw, resolver: OpenAPIRefResolver
         minLength: s.minLength,
         maxLength: s.maxLength,
         nullable: isNullable,
+        description: s.description,
       };
 
-    case "integer":
+    case "integer": {
+      // OpenAPI 3.1 uses numeric exclusiveMinimum/exclusiveMaximum instead of boolean
+      const exMin = typeof s.exclusiveMinimum === "number"
+        ? s.exclusiveMinimum
+        : (typeof s.exclusiveMinimum === "boolean" ? s.exclusiveMinimum : undefined);
+      const exMax = typeof s.exclusiveMaximum === "number"
+        ? s.exclusiveMaximum
+        : (typeof s.exclusiveMaximum === "boolean" ? s.exclusiveMaximum : undefined);
       return {
         type: "integer",
         format: s.format,
         enum: s.enum as number[] | undefined,
         minimum: s.minimum,
         maximum: s.maximum,
-        exclusiveMinimum: typeof s.exclusiveMinimum === "boolean" ? s.exclusiveMinimum : undefined,
-        exclusiveMaximum: typeof s.exclusiveMaximum === "boolean" ? s.exclusiveMaximum : undefined,
+        exclusiveMinimum: exMin,
+        exclusiveMaximum: exMax,
         multipleOf: s.multipleOf,
         nullable: isNullable,
+        description: s.description,
       };
+    }
 
-    case "number":
+    case "number": {
+      const exMin = typeof s.exclusiveMinimum === "number"
+        ? s.exclusiveMinimum
+        : (typeof s.exclusiveMinimum === "boolean" ? s.exclusiveMinimum : undefined);
+      const exMax = typeof s.exclusiveMaximum === "number"
+        ? s.exclusiveMaximum
+        : (typeof s.exclusiveMaximum === "boolean" ? s.exclusiveMaximum : undefined);
       return {
         type: "number",
         format: s.format,
         enum: s.enum as number[] | undefined,
         minimum: s.minimum,
         maximum: s.maximum,
-        exclusiveMinimum: typeof s.exclusiveMinimum === "boolean" ? s.exclusiveMinimum : undefined,
-        exclusiveMaximum: typeof s.exclusiveMaximum === "boolean" ? s.exclusiveMaximum : undefined,
+        exclusiveMinimum: exMin,
+        exclusiveMaximum: exMax,
         multipleOf: s.multipleOf,
         nullable: isNullable,
+        description: s.description,
       };
+    }
 
     case "boolean":
       return {
         type: "boolean",
         nullable: isNullable,
+        description: s.description,
       };
 
     case "null":
       return {
         type: "null",
+        description: s.description,
       };
 
     case "array": {
@@ -282,6 +368,7 @@ function parseSchema(schemaRaw: SchemaRaw | RefRaw, resolver: OpenAPIRefResolver
         maxItems: s.maxItems,
         uniqueItems: s.uniqueItems,
         nullable: isNullable,
+        description: s.description,
       };
     }
 
@@ -306,6 +393,7 @@ function parseSchema(schemaRaw: SchemaRaw | RefRaw, resolver: OpenAPIRefResolver
         required: s.required,
         additionalProperties,
         nullable: isNullable,
+        description: s.description,
       };
     }
 
@@ -313,6 +401,7 @@ function parseSchema(schemaRaw: SchemaRaw | RefRaw, resolver: OpenAPIRefResolver
       return {
         type: "any",
         nullable: isNullable,
+        description: s.description,
       };
   }
 }
