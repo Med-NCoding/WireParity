@@ -15,11 +15,17 @@ export type IRPrimitiveType =
 export type IRFormat =
   | "date"
   | "date-time"
-  | "uuid"
+  | "password"
   | "byte"
   | "binary"
   | "email"
+  | "uuid"
   | "uri"
+  | "hostname"
+  | "ipv4"
+  | "ipv6"
+  | "time"
+  | "duration"
   | "int32"
   | "int64"
   | "float"
@@ -33,6 +39,8 @@ export interface IRStringSchema {
   minLength?: number;
   maxLength?: number;
   nullable?: boolean;
+  default?: string;
+  description?: string;
 }
 
 export interface IRIntegerSchema {
@@ -41,10 +49,12 @@ export interface IRIntegerSchema {
   enum?: number[];
   minimum?: number;
   maximum?: number;
-  exclusiveMinimum?: boolean;
-  exclusiveMaximum?: boolean;
+  exclusiveMinimum?: boolean | number;
+  exclusiveMaximum?: boolean | number;
   multipleOf?: number;
   nullable?: boolean;
+  default?: number;
+  description?: string;
 }
 
 export interface IRNumberSchema {
@@ -53,19 +63,24 @@ export interface IRNumberSchema {
   enum?: number[];
   minimum?: number;
   maximum?: number;
-  exclusiveMinimum?: boolean;
-  exclusiveMaximum?: boolean;
+  exclusiveMinimum?: boolean | number;
+  exclusiveMaximum?: boolean | number;
   multipleOf?: number;
   nullable?: boolean;
+  default?: number;
+  description?: string;
 }
 
 export interface IRBooleanSchema {
   type: "boolean";
   nullable?: boolean;
+  default?: boolean;
+  description?: string;
 }
 
 export interface IRNullSchema {
   type: "null";
+  description?: string;
 }
 
 export interface IRArraySchema {
@@ -75,6 +90,7 @@ export interface IRArraySchema {
   maxItems?: number;
   uniqueItems?: boolean;
   nullable?: boolean;
+  description?: string;
 }
 
 export interface IRObjectSchema {
@@ -82,12 +98,16 @@ export interface IRObjectSchema {
   properties: Record<string, IRSchema>;
   required?: string[];
   additionalProperties?: boolean | IRSchema;
+  minProperties?: number;
+  maxProperties?: number;
   nullable?: boolean;
+  description?: string;
 }
 
 export interface IRAnySchema {
   type: "any";
   nullable?: boolean;
+  description?: string;
 }
 
 export type IRSchema =
@@ -99,6 +119,14 @@ export type IRSchema =
   | IRArraySchema
   | IRObjectSchema
   | IRAnySchema;
+
+/**
+ * Checks if a given IRSchema permits null values (either type === "null" or nullable === true).
+ */
+export function isNullableSchema(schema: IRSchema): boolean {
+  if (schema.type === "null") return true;
+  return schema.nullable === true;
+}
 
 // --- IR Value Runtime AST ---
 
