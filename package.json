@@ -8,7 +8,8 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "generate:sdks": "bash scripts/generate_sdks.sh"
   },
   "keywords": [
     "differential-testing",

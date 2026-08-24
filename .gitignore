@@ -2,3 +2,5 @@ node_modules
 dist
 .wireparity
 *.log
+fixtures/sdks/typescript/
+fixtures/sdks/python/
