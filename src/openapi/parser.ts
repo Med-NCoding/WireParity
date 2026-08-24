@@ -195,17 +195,50 @@ function parseOperation(
   };
 }
 
+/**
+ * Returns the default serialization style for a parameter location per OpenAPI 3.x spec:
+ *   - path   → simple
+ *   - query  → form
+ *   - header → simple
+ *   - cookie → form
+ */
+function defaultStyleFor(location: string): IRParameterStyle {
+  switch (location) {
+    case "query":
+    case "cookie":
+      return "form";
+    case "path":
+    case "header":
+    default:
+      return "simple";
+  }
+}
+
+/**
+ * Returns the default explode value for a given serialization style per OpenAPI 3.x spec:
+ *   - form style  → true  (query / cookie)
+ *   - other styles → false (simple, label, matrix, …)
+ */
+function defaultExplodeFor(style: IRParameterStyle): boolean {
+  return style === "form";
+}
+
 function parseParameter(paramRaw: ParameterRaw, resolver: OpenAPIRefResolver): IRParameter {
   const schemaRaw = paramRaw.schema ? resolver.resolve<SchemaRaw>(paramRaw.schema) : { type: "string" };
   const schema = parseSchema(schemaRaw, resolver);
 
+  const location = paramRaw.in as IRParameterLocation;
+  const style: IRParameterStyle =
+    (paramRaw.style as IRParameterStyle | undefined) ?? defaultStyleFor(location);
+  const explode: boolean = paramRaw.explode ?? defaultExplodeFor(style);
+
   return {
     name: paramRaw.name,
-    in: paramRaw.in as IRParameterLocation,
-    required: paramRaw.required ?? (paramRaw.in === "path"),
+    in: location,
+    required: paramRaw.required ?? (location === "path"),
     description: paramRaw.description,
-    style: paramRaw.style as IRParameterStyle | undefined,
-    explode: paramRaw.explode,
+    style,
+    explode,
     deprecated: paramRaw.deprecated,
     schema,
   };
