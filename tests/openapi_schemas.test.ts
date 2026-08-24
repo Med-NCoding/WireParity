@@ -12,15 +12,15 @@
  * 8. allOf with $ref sub-schemas
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { parseOpenAPISpec, OpenAPIParseError } from "../src/openapi/parser.js";
-import type { IRObjectSchema } from "../src/ir/index.js";
+import type { IRObjectSchema, IRSchema } from "../src/ir/index.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function objectSchema(spec: object): IRObjectSchema {
+function anySchema(spec: object): IRSchema {
   const doc = parseOpenAPISpec({
     openapi: "3.0.3",
     info: { title: "T", version: "1" },
@@ -38,7 +38,11 @@ function objectSchema(spec: object): IRObjectSchema {
     },
   });
   const body = doc.operations[0]!.requestBody!;
-  return body.content["application/json"]!.schema as IRObjectSchema;
+  return body.content["application/json"]!.schema;
+}
+
+function objectSchema(spec: object): IRObjectSchema {
+  return anySchema(spec) as IRObjectSchema;
 }
 
 // ---------------------------------------------------------------------------
@@ -419,3 +423,228 @@ describe("allOf with $ref sub-schemas", () => {
     expect(() => parseOpenAPISpec(spec)).toThrow(OpenAPIParseError);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 9. oneOf Schema Polymorphism Fallback & Telemetry
+// ---------------------------------------------------------------------------
+
+describe("oneOf schema polymorphism fallback", () => {
+  it("selects the first non-null variant as fallback representation", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const schema = anySchema({
+      oneOf: [
+        { type: "string", format: "email" },
+        { type: "integer" },
+      ],
+    });
+    expect(schema.type).toBe("string");
+    expect((schema as { format?: string }).format).toBe("email");
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("[WireParity] oneOf polymorphism fallback")
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("propagates nullable: true when a variant is type 'null'", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const schema = anySchema({
+      oneOf: [
+        { type: "string" },
+        { type: "null" },
+      ],
+    });
+    expect(schema.type).toBe("string");
+    expect(schema.nullable).toBe(true);
+    warnSpy.mockRestore();
+  });
+
+  it("skips leading null variant and selects the first non-null variant", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const schema = anySchema({
+      oneOf: [
+        { type: "null" },
+        { type: "integer", minimum: 0 },
+      ],
+    });
+    expect(schema.type).toBe("integer");
+    expect((schema as { minimum?: number }).minimum).toBe(0);
+    expect(schema.nullable).toBe(true);
+    warnSpy.mockRestore();
+  });
+
+  it("resolves $ref variants and selects the first non-null variant", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const spec = {
+      openapi: "3.0.3",
+      info: { title: "T", version: "1" },
+      components: {
+        schemas: {
+          Cat: { type: "object", properties: { meow: { type: "boolean" } } },
+          Dog: { type: "object", properties: { bark: { type: "boolean" } } },
+        },
+      },
+      paths: {
+        "/pet": {
+          post: {
+            operationId: "createPet",
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    oneOf: [
+                      { $ref: "#/components/schemas/Cat" },
+                      { $ref: "#/components/schemas/Dog" },
+                    ],
+                  },
+                },
+              },
+            },
+            responses: {},
+          },
+        },
+      },
+    };
+    const doc = parseOpenAPISpec(spec);
+    const schema = doc.operations[0]!.requestBody!.content["application/json"]!.schema as IRObjectSchema;
+    expect(schema.type).toBe("object");
+    expect(schema.properties).toHaveProperty("meow");
+    expect(schema.properties).not.toHaveProperty("bark");
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("[WireParity] oneOf polymorphism fallback")
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("returns { type: 'any' } when oneOf array is empty", () => {
+    const schema = anySchema({
+      oneOf: [],
+    });
+    expect(schema.type).toBe("any");
+  });
+
+  it("returns { type: 'null' } when all variants are null", () => {
+    const schema = anySchema({
+      oneOf: [{ type: "null" }],
+    });
+    expect(schema.type).toBe("null");
+  });
+
+  it("preserves parent description when specified", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const schema = anySchema({
+      description: "Polymorphic payload",
+      oneOf: [
+        { type: "string" },
+        { type: "number" },
+      ],
+    });
+    expect(schema.description).toBe("Polymorphic payload");
+    warnSpy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 10. anyOf Schema Polymorphism Fallback & Telemetry
+// ---------------------------------------------------------------------------
+
+describe("anyOf schema polymorphism fallback", () => {
+  it("selects the first non-null variant as fallback representation", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const schema = anySchema({
+      anyOf: [
+        { type: "object", properties: { token: { type: "string" } } },
+        { type: "object", properties: { key: { type: "string" } } },
+      ],
+    }) as IRObjectSchema;
+    expect(schema.type).toBe("object");
+    expect(schema.properties).toHaveProperty("token");
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("[WireParity] anyOf polymorphism fallback")
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("propagates nullable: true when a variant is type 'null'", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const schema = anySchema({
+      anyOf: [
+        { type: "integer" },
+        { type: "null" },
+      ],
+    });
+    expect(schema.type).toBe("integer");
+    expect(schema.nullable).toBe(true);
+    warnSpy.mockRestore();
+  });
+
+  it("resolves $ref variants in anyOf", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const spec = {
+      openapi: "3.0.3",
+      info: { title: "T", version: "1" },
+      components: {
+        schemas: {
+          PrimaryAuth: { type: "object", properties: { apiKey: { type: "string" } } },
+          SecondaryAuth: { type: "object", properties: { oauthToken: { type: "string" } } },
+        },
+      },
+      paths: {
+        "/auth": {
+          post: {
+            operationId: "auth",
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    anyOf: [
+                      { $ref: "#/components/schemas/PrimaryAuth" },
+                      { $ref: "#/components/schemas/SecondaryAuth" },
+                    ],
+                  },
+                },
+              },
+            },
+            responses: {},
+          },
+        },
+      },
+    };
+    const doc = parseOpenAPISpec(spec);
+    const schema = doc.operations[0]!.requestBody!.content["application/json"]!.schema as IRObjectSchema;
+    expect(schema.type).toBe("object");
+    expect(schema.properties).toHaveProperty("apiKey");
+    expect(schema.properties).not.toHaveProperty("oauthToken");
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("[WireParity] anyOf polymorphism fallback")
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("returns { type: 'any' } when anyOf array is empty", () => {
+    const schema = anySchema({
+      anyOf: [],
+    });
+    expect(schema.type).toBe("any");
+  });
+
+  it("handles nested oneOf inside anyOf safely", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const schema = anySchema({
+      anyOf: [
+        {
+          oneOf: [
+            { type: "string", format: "uuid" },
+            { type: "string", format: "email" },
+          ],
+        },
+        { type: "integer" },
+      ],
+    });
+    expect(schema.type).toBe("string");
+    expect((schema as { format?: string }).format).toBe("uuid");
+    warnSpy.mockRestore();
+  });
+});
+

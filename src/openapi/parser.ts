@@ -344,6 +344,67 @@ function parseSchema(schemaRaw: SchemaRaw | RefRaw, resolver: OpenAPIRefResolver
     return mergedResult;
   }
 
+  // Handle oneOf / anyOf polymorphism fallback (Step 2.5):
+  //   • Select the first non-null variant as the primary representation
+  //   • Propagate nullable if any variant is null/nullable or parent is nullable
+  //   • Emit warning telemetry when multiple variants are defined
+  //   • If no non-null variants exist, fallback to "null" or "any"
+  const polyVariants = s.oneOf ?? s.anyOf;
+  const polyKind = s.oneOf ? "oneOf" : s.anyOf ? "anyOf" : undefined;
+
+  if (polyVariants && Array.isArray(polyVariants)) {
+    if (polyVariants.length === 0) {
+      return {
+        type: "any",
+        nullable: s.nullable ?? false,
+        description: s.description,
+      };
+    }
+
+    let isNullable = s.nullable ?? false;
+    const nonNullVariants: (SchemaRaw | RefRaw)[] = [];
+
+    for (const v of polyVariants) {
+      const resolved = resolver.resolve<SchemaRaw>(v);
+      if (
+        resolved.type === "null" ||
+        (Array.isArray(resolved.type) && resolved.type.includes("null") && resolved.type.length === 1)
+      ) {
+        isNullable = true;
+      } else {
+        if (resolved.nullable || (Array.isArray(resolved.type) && resolved.type.includes("null"))) {
+          isNullable = true;
+        }
+        nonNullVariants.push(v);
+      }
+    }
+
+    if (nonNullVariants.length === 0) {
+      // All variants were null
+      return {
+        type: "null",
+        description: s.description,
+      };
+    }
+
+    if (polyVariants.length > 1) {
+      console.warn(
+        `[WireParity] ${polyKind} polymorphism fallback: using first non-null variant out of ${polyVariants.length} definitions`
+      );
+    }
+
+    const firstVariantParsed = parseSchema(nonNullVariants[0]!, resolver);
+
+    const result = { ...firstVariantParsed };
+    if (isNullable && "nullable" in result) {
+      (result as { nullable?: boolean }).nullable = true;
+    }
+    if (s.description && !result.description) {
+      result.description = s.description;
+    }
+    return result;
+  }
+
   // OpenAPI 3.1: type may be an array e.g. ["string", "null"] or ["integer", "null"]
   let typeStr: string | undefined;
   let isNullable = s.nullable ?? false;
