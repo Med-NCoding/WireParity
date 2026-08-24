@@ -266,15 +266,29 @@ function parseRequestBody(bodyRaw: RequestBodyRaw, resolver: OpenAPIRefResolver)
 function parseSchema(schemaRaw: SchemaRaw | RefRaw, resolver: OpenAPIRefResolver): IRSchema {
   const s = resolver.resolve<SchemaRaw>(schemaRaw);
 
-  // Handle allOf merging
+  // Handle allOf merging — safe documented subset (Step 2.4):
+  //   • Object property union (later sub-schemas win on duplicate property names)
+  //   • Required array union
+  //   • Format intersection (kept only when all concrete sub-schemas agree)
+  //   • Conflicting concrete types → OpenAPIParseError
+  //   • Nullable propagated if any sub-schema is nullable
   if (s.allOf && Array.isArray(s.allOf) && s.allOf.length > 0) {
     const mergedProps: Record<string, IRSchema> = {};
     const mergedRequired = new Set<string>();
     let isNullable = s.nullable ?? false;
+    const concreteTypes: string[] = [];
+    const formats: string[] = [];
 
     for (const sub of s.allOf) {
       const parsedSub = parseSchema(sub, resolver);
+
+      // Collect concrete types (exclude "any" and "null" which carry no type conflict)
+      if (parsedSub.type !== "any" && parsedSub.type !== "null") {
+        concreteTypes.push(parsedSub.type);
+      }
+
       if (parsedSub.type === "object") {
+        // Union object properties — later sub-schema wins on duplicate key
         for (const [propName, propSchema] of Object.entries(parsedSub.properties)) {
           mergedProps[propName] = propSchema;
         }
@@ -282,10 +296,29 @@ function parseSchema(schemaRaw: SchemaRaw | RefRaw, resolver: OpenAPIRefResolver
           for (const req of parsedSub.required) mergedRequired.add(req);
         }
       }
+
+      // Collect formats for intersection
+      if ("format" in parsedSub && typeof parsedSub.format === "string") {
+        formats.push(parsedSub.format);
+      }
+
       if ("nullable" in parsedSub && parsedSub.nullable) isNullable = true;
     }
 
-    // Merge direct properties if any
+    // Conflicting type validation: throw when two different concrete types appear
+    const uniqueTypes = Array.from(new Set(concreteTypes));
+    if (uniqueTypes.length > 1) {
+      throw new OpenAPIParseError(
+        `allOf schema conflict: incompatible types [${uniqueTypes.join(", ")}] cannot be merged`,
+        "allOf"
+      );
+    }
+
+    // Format intersection: keep only when every sub-schema that declares a format agrees
+    const mergedFormat =
+      formats.length > 0 && formats.every((f) => f === formats[0]) ? formats[0] : undefined;
+
+    // Parent-level properties/required applied last (parent overrides sub-schema props)
     if (s.properties) {
       for (const [propName, propRaw] of Object.entries(s.properties)) {
         mergedProps[propName] = parseSchema(propRaw, resolver);
@@ -295,12 +328,20 @@ function parseSchema(schemaRaw: SchemaRaw | RefRaw, resolver: OpenAPIRefResolver
       for (const req of s.required) mergedRequired.add(req);
     }
 
-    return {
+    const mergedResult: IRSchema = {
       type: "object",
       properties: mergedProps,
       required: mergedRequired.size > 0 ? Array.from(mergedRequired) : undefined,
       nullable: isNullable,
+      description: s.description,
     };
+
+    // Attach intersected format when present (requires casting since IRObjectSchema has no format)
+    if (mergedFormat) {
+      (mergedResult as unknown as Record<string, unknown>)["format"] = mergedFormat;
+    }
+
+    return mergedResult;
   }
 
   // OpenAPI 3.1: type may be an array e.g. ["string", "null"] or ["integer", "null"]
