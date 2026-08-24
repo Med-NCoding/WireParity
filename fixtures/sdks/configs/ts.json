@@ -1,0 +1,14 @@
+{
+  "npmName": "wireparity-petstore-ts",
+  "npmVersion": "1.0.0",
+  "supportsES6": true,
+  "typescriptThreePlus": true,
+  "withSeparateModelsAndApi": true,
+  "modelPackage": "models",
+  "apiPackage": "apis",
+  "enumPropertyNaming": "UPPERCASE",
+  "modelPropertyNaming": "camelCase",
+  "withInterfaces": true,
+  "withoutRuntimeChecks": true,
+  "useSingleRequestParameter": true
+}

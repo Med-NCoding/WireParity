@@ -1,0 +1,9 @@
+{
+  "packageName": "wireparity_petstore",
+  "packageVersion": "1.0.0",
+  "projectName": "wireparity-petstore-python",
+  "pythonAttrNoneIfUnset": true,
+  "floatStrictType": false,
+  "generateSourceCodeOnly": false,
+  "library": "urllib3"
+}

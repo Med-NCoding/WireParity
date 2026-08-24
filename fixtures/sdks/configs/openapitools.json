@@ -1,0 +1,31 @@
+{
+  "$schema": "node_modules/@openapitools/openapi-generator-cli/config.schema.json",
+  "spaces": 2,
+  "generator-cli": {
+    "version": "7.7.0"
+  },
+  "generators": {
+    "typescript-petstore": {
+      "generatorName": "typescript-fetch",
+      "output": "fixtures/sdks/typescript",
+      "inputSpec": "fixtures/specs/petstore.json",
+      "configFile": "fixtures/sdks/configs/ts.json",
+      "globalProperty": {
+        "models": "",
+        "apis": "",
+        "supportingFiles": ""
+      }
+    },
+    "python-petstore": {
+      "generatorName": "python",
+      "output": "fixtures/sdks/python",
+      "inputSpec": "fixtures/specs/petstore.json",
+      "configFile": "fixtures/sdks/configs/python.json",
+      "globalProperty": {
+        "models": "",
+        "apis": "",
+        "supportingFiles": ""
+      }
+    }
+  }
+}
