@@ -19,6 +19,10 @@ import type { CapturedRequest } from "../capture/types.js";
 /**
  * Transport-level headers that carry no semantic meaning for API
  * contract comparison. These are stripped before diffing.
+ *
+ * Includes the five mandated noise headers plus runtime-injected defaults:
+ *  - accept, accept-language: injected by Node.js undici fetch; not set by Python urllib
+ *  - sec-fetch-*: Fetch metadata headers injected by browser/Node fetch runtimes
  */
 export const TRANSPORT_HEADERS: ReadonlySet<string> = new Set([
   "user-agent",
@@ -26,6 +30,12 @@ export const TRANSPORT_HEADERS: ReadonlySet<string> = new Set([
   "connection",
   "content-length",
   "accept-encoding",
+  // Node.js undici fetch runtime defaults (not sent by Python urllib)
+  "accept",
+  "accept-language",
+  "sec-fetch-mode",
+  "sec-fetch-site",
+  "sec-fetch-dest",
 ]);
 
 /**

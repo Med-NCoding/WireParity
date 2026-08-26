@@ -69,9 +69,10 @@ describe("normalizeHeaders", () => {
   });
 
   it("collapses multi-value header arrays to comma-separated string", () => {
-    const raw = makeRequest({ accept: ["application/json", "text/plain"] });
+    // 'accept' is in TRANSPORT_HEADERS; use a semantic custom header instead
+    const raw = makeRequest({ "x-custom-values": ["application/json", "text/plain"] });
     const result = normalizeHeaders(raw, makeOperation());
-    expect(result["accept"]).toBe("application/json, text/plain");
+    expect(result["x-custom-values"]).toBe("application/json, text/plain");
   });
 
   it("skips headers with undefined values", () => {
@@ -120,11 +121,19 @@ describe("normalizeHeaders", () => {
 });
 
 describe("TRANSPORT_HEADERS constant", () => {
-  it("contains exactly the five mandated noise headers", () => {
+  it("contains the five mandated noise headers", () => {
     expect(TRANSPORT_HEADERS.has("user-agent")).toBe(true);
     expect(TRANSPORT_HEADERS.has("host")).toBe(true);
     expect(TRANSPORT_HEADERS.has("connection")).toBe(true);
     expect(TRANSPORT_HEADERS.has("content-length")).toBe(true);
     expect(TRANSPORT_HEADERS.has("accept-encoding")).toBe(true);
+  });
+
+  it("contains runtime-default fetch headers that differ between TS and Python runtimes", () => {
+    expect(TRANSPORT_HEADERS.has("accept")).toBe(true);
+    expect(TRANSPORT_HEADERS.has("accept-language")).toBe(true);
+    expect(TRANSPORT_HEADERS.has("sec-fetch-mode")).toBe(true);
+    expect(TRANSPORT_HEADERS.has("sec-fetch-site")).toBe(true);
+    expect(TRANSPORT_HEADERS.has("sec-fetch-dest")).toBe(true);
   });
 });
