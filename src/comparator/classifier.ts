@@ -67,6 +67,13 @@ export function classifyDivergence(
   }
 
   // Location === "body"
+  if (pathStr === "body" && (valA === null || valA === undefined || valB === null || valB === undefined)) {
+    return {
+      category: "BODY_MISSING",
+      message: `Request body is present in one SDK but missing/null in the other`,
+    };
+  }
+
   if (valA === undefined && valB === null) {
     return {
       category: "OPTIONAL_VS_NULL",
@@ -87,11 +94,6 @@ export function classifyDivergence(
     };
   }
 
-  // Case convention leak (e.g. camelCase vs snake_case)
-  const isSnakeVsCamel =
-    typeof pathStr === "string" &&
-    (pathStr.includes("_") || /[A-Z]/.test(pathStr));
-
   // Date / Timestamp mismatch (e.g. integer unix timestamp vs ISO string)
   if (
     (typeof valA === "string" && typeof valB === "number") ||
@@ -107,6 +109,19 @@ export function classifyDivergence(
         message: `Date/Time representation mismatch at '${pathStr}': '${valA}' vs '${valB}'`,
       };
     }
+  }
+
+  // Enum serialization differences (e.g. "PLACED" vs "placed", uppercase vs lowercase)
+  if (
+    typeof valA === "string" &&
+    typeof valB === "string" &&
+    valA.toLowerCase() === valB.toLowerCase() &&
+    valA !== valB
+  ) {
+    return {
+      category: "ENUM_SERIALIZATION_ERROR",
+      message: `Enum casing divergence at '${pathStr}': '${valA}' vs '${valB}'`,
+    };
   }
 
   // Type mismatch

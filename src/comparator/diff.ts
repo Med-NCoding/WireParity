@@ -169,6 +169,16 @@ function diffBodies(
     return;
   }
 
+  if (Array.isArray(bodyA) && Array.isArray(bodyB)) {
+    const maxLen = Math.max(bodyA.length, bodyB.length);
+    for (let i = 0; i < maxLen; i++) {
+      const valA = bodyA[i];
+      const valB = bodyB[i];
+      diffBodies(valA, valB, `${path}[${i}]`, sdkA, sdkB, diffs);
+    }
+    return;
+  }
+
   const { category, message } = classifyDivergence("body", path, bodyA, bodyB);
   diffs.push({
     category,
