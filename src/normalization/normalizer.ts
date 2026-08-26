@@ -4,6 +4,7 @@ import {
   type NormalizationOptions,
   type NormalizedRequest,
 } from "./types.js";
+import { normalizeJsonBody } from "./body.js";
 
 /**
  * Normalizes a raw CapturedRequest into a canonical NormalizedRequest.
@@ -65,11 +66,11 @@ export function normalizeRequest(
   // 5. Body normalization
   let body: unknown | null = null;
   if (raw.jsonBody !== null && raw.jsonBody !== undefined) {
-    body = normalizeJson(raw.jsonBody);
+    body = normalizeJsonBody(raw.jsonBody);
   } else if (raw.body !== null && raw.body.trim().length > 0) {
     try {
       const parsed = JSON.parse(raw.body);
-      body = normalizeJson(parsed);
+      body = normalizeJsonBody(parsed);
     } catch {
       body = raw.body;
     }
@@ -83,46 +84,4 @@ export function normalizeRequest(
     body,
     rawBody: raw.body,
   };
-}
-
-function normalizeJson(val: unknown): unknown {
-  if (val === null || val === undefined) {
-    return val;
-  }
-
-  if (typeof val === "number") {
-    // Normalizes -0 to 0
-    return Object.is(val, -0) ? 0 : val;
-  }
-
-  if (typeof val === "string") {
-    // ISO-8601 Date normalization if exact matching format
-    const isoDateRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
-    if (isoDateRegex.test(val)) {
-      const parsedDate = new Date(val);
-      if (!isNaN(parsedDate.getTime())) {
-        return parsedDate.toISOString();
-      }
-    }
-    return val;
-  }
-
-  if (Array.isArray(val)) {
-    return val.map((item) => normalizeJson(item));
-  }
-
-  if (typeof val === "object") {
-    const sortedObj: Record<string, unknown> = {};
-    const keys = Object.keys(val as Record<string, unknown>).sort();
-    for (const key of keys) {
-      const propVal = (val as Record<string, unknown>)[key];
-      // Keep explicit nulls, drop undefined
-      if (propVal !== undefined) {
-        sortedObj[key] = normalizeJson(propVal);
-      }
-    }
-    return sortedObj;
-  }
-
-  return val;
 }
