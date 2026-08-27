@@ -1,5 +1,138 @@
+import * as fc from "fast-check";
+import type { IROperation, IRParameter, IRRequestBody } from "../ir/operations.js";
+import type { OperationInputs } from "../ir/inputs.js";
 import type { IRObjectValue, IRSchema, IRValue } from "../ir/values.js";
+import { irValueArbitrary } from "./arbitraries/complex.js";
+import { hashSeed } from "./seed.js";
 import { SeededPRNG } from "./prng.js";
+
+// ─── Fast-Check Operation Inputs Arbitrary ────────────────────────────────────
+
+/**
+ * Builds an arbitrary for a list of IRParameters (e.g. path, query, header, or cookie).
+ * Required parameters are always generated.
+ * Optional parameters are generated with weighted presence or omitted.
+ */
+function buildParamsArbitrary(
+  params: IRParameter[]
+): fc.Arbitrary<Record<string, IRValue>> {
+  if (params.length === 0) {
+    return fc.constant({});
+  }
+
+  type ParamOption = IRValue | undefined;
+
+  const perParamArbs: fc.Arbitrary<{ name: string; value: ParamOption }>[] = params.map((p) => {
+    const valArb = irValueArbitrary(p.schema);
+    if (p.required) {
+      return valArb.map((v) => ({ name: p.name, value: v }));
+    } else {
+      return fc.oneof(
+        { arbitrary: valArb.map((v) => ({ name: p.name, value: v })), weight: 3 },
+        { arbitrary: fc.constant({ name: p.name, value: undefined }), weight: 1 }
+      );
+    }
+  });
+
+  return fc.tuple(...perParamArbs).map((entries) => {
+    const record: Record<string, IRValue> = {};
+    for (const entry of entries) {
+      if (entry.value !== undefined) {
+        record[entry.name] = entry.value;
+      }
+    }
+    return record;
+  });
+}
+
+/**
+ * Builds an arbitrary for request body if defined on the operation.
+ * If required: always produces an IRValue according to media type schema.
+ * If optional: produces either an IRValue or undefined.
+ */
+function buildBodyArbitrary(
+  requestBody?: IRRequestBody
+): fc.Arbitrary<IRValue | undefined> {
+  if (!requestBody || !requestBody.content) {
+    return fc.constant(undefined);
+  }
+
+  const jsonMedia =
+    requestBody.content["application/json"] ??
+    Object.values(requestBody.content)[0];
+
+  if (!jsonMedia || !jsonMedia.schema) {
+    return fc.constant(undefined);
+  }
+
+  const bodyValArb = irValueArbitrary(jsonMedia.schema);
+
+  if (requestBody.required) {
+    return bodyValArb;
+  } else {
+    return fc.oneof(
+      { arbitrary: bodyValArb, weight: 3 },
+      { arbitrary: fc.constant(undefined), weight: 1 }
+    );
+  }
+}
+
+/**
+ * Returns a fast-check `Arbitrary<OperationInputs>` synthesizing complete,
+ * contract-valid inputs (pathParams, queryParams, headerParams, cookieParams, body)
+ * for any given `IROperation`.
+ */
+export function operationInputsArbitrary(
+  operation: IROperation
+): fc.Arbitrary<OperationInputs> {
+  const pathParams = operation.parameters.filter((p) => p.in === "path");
+  const queryParams = operation.parameters.filter((p) => p.in === "query");
+  const headerParams = operation.parameters.filter((p) => p.in === "header");
+  const cookieParams = operation.parameters.filter((p) => p.in === "cookie");
+
+  const pathArb = buildParamsArbitrary(pathParams);
+  const queryArb = buildParamsArbitrary(queryParams);
+  const headerArb = buildParamsArbitrary(headerParams);
+  const cookieArb = buildParamsArbitrary(cookieParams);
+  const bodyArb = buildBodyArbitrary(operation.requestBody);
+
+  return fc
+    .tuple(pathArb, queryArb, headerArb, cookieArb, bodyArb)
+    .map(([path, query, header, cookie, body]) => {
+      const inputs: OperationInputs = {
+        pathParams: path,
+        queryParams: query,
+        headerParams: header,
+      };
+      if (Object.keys(cookie).length > 0) {
+        inputs.cookieParams = cookie;
+      }
+      if (body !== undefined) {
+        inputs.body = body;
+      }
+      return inputs;
+    });
+}
+
+/**
+ * Synthesizes a single concrete `OperationInputs` for an `IROperation`, optionally
+ * seeded for deterministic reproducibility.
+ */
+export function synthesizeOperationInputs(
+  operation: IROperation,
+  seed?: number | string
+): OperationInputs {
+  const arb = operationInputsArbitrary(operation);
+  const params: fc.Parameters<OperationInputs> = { numRuns: 1 };
+  if (seed !== undefined) {
+    params.seed = hashSeed(seed);
+  }
+  const sampled = fc.sample(arb, params);
+  return sampled[0]!;
+}
+
+
+// ─── Legacy SchemaValueGenerator ──────────────────────────────────────────────
 
 const UNICODE_CORNER_CASES = [
   "Hello World",
@@ -144,3 +277,4 @@ export class SchemaValueGenerator {
     return { kind: "object", fields };
   }
 }
+

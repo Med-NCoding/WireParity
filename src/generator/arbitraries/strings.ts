@@ -91,9 +91,10 @@ export const uriArbitrary: fc.Arbitrary<string> = fc.webUrl();
 
 /** ISO-8601 date: YYYY-MM-DD */
 export const dateArbitrary: fc.Arbitrary<string> = fc.date({
-  min: new Date("2000-01-01"),
-  max: new Date("2099-12-31"),
-}).map((d) => d.toISOString().slice(0, 10));
+  min: new Date("2000-01-01T00:00:00.000Z"),
+  max: new Date("2099-12-31T23:59:59.999Z"),
+}).filter((d) => !isNaN(d.getTime())).map((d) => d.toISOString().slice(0, 10));
+
 
 /** ISO-8601 date-time: YYYY-MM-DDTHH:mm:ss.mmmZ */
 export const dateTimeArbitrary: fc.Arbitrary<string> = fc.date({
