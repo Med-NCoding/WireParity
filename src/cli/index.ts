@@ -1,9 +1,10 @@
 /**
- * WireParity - Developer CLI & Flag Handling (Step 9.3)
+ * WireParity - Developer CLI & Flag Handling (Step 9.3 & 9.4)
  *
  * Implements the command-line interface:
- *   - Parses flags: --spec, --ts, --py, --go, --seed, --replay-path,
+ *   - Parses flags: --spec, --config, --ts, --py, --go, --seed, --replay-path,
  *                   --iterations, --bail, --operations, --json, --help, --version
+ *   - Supports config loading from `wireparity.config.json` (Step 9.4)
  *   - Instantiates SubprocessSDKRunners
  *   - Executes the differential testing orchestrator
  *   - Emits human-readable terminal reports or machine-readable JSON
@@ -18,11 +19,15 @@ import { formatJsonReport } from "../reporter/json.js";
 import { runParitySuite } from "../reporter/orchestrator.js";
 import { SubprocessSDKRunner } from "../runners/subprocess.js";
 import type { SDKRunner } from "../runners/types.js";
+import { findConfigFile, loadConfigFile, mergeConfigWithCli } from "./config.js";
+
+export * from "./config.js";
 
 // ─── CLI Options Interface ────────────────────────────────────────────────────
 
 export interface CliOptions {
   spec?: string;
+  config?: string;
   ts?: string;
   py?: string;
   go?: string;
@@ -43,6 +48,7 @@ export function parseCliArgs(argv: string[]): CliOptions {
     args: argv,
     options: {
       spec: { type: "string", short: "s" },
+      config: { type: "string", short: "c" },
       ts: { type: "string" },
       py: { type: "string" },
       go: { type: "string" },
@@ -69,6 +75,7 @@ export function parseCliArgs(argv: string[]): CliOptions {
 
   return {
     spec: values.spec,
+    config: values.config,
     ts: values.ts,
     py: values.py,
     go: values.go,
@@ -107,10 +114,13 @@ export async function runCLI(argv: string[] = process.argv.slice(2)): Promise<nu
     console.log(`WireParity - Differential Testing Tool for Multi-Language SDKs
 
 Usage:
+  wireparity [options]
   wireparity --spec <path-to-openapi> [options]
+  wireparity --config <path-to-wireparity.config.json>
 
 Options:
-  -s, --spec <path>         Path to OpenAPI 3.0/3.1 spec JSON/YAML (required)
+  -s, --spec <path>         Path to OpenAPI 3.0/3.1 spec JSON/YAML
+  -c, --config <path>       Path to wireparity.config.json
   --ts <command>            TypeScript runner command or entrypoint
   --py <command>            Python runner command or entrypoint
   --go <command>            Go runner command or entrypoint
@@ -131,8 +141,30 @@ Options:
     return 0;
   }
 
+  // Load config file if explicitly provided or auto-discovered
+  if (options.config) {
+    try {
+      const config = loadConfigFile(options.config);
+      options = mergeConfigWithCli(config, options);
+    } catch (err: unknown) {
+      console.error(`Error loading configuration file: ${err instanceof Error ? err.message : String(err)}`);
+      return 2;
+    }
+  } else if (!options.spec) {
+    const discovered = findConfigFile();
+    if (discovered) {
+      try {
+        const config = loadConfigFile(discovered);
+        options = mergeConfigWithCli(config, options);
+      } catch (err: unknown) {
+        console.error(`Error loading configuration file: ${err instanceof Error ? err.message : String(err)}`);
+        return 2;
+      }
+    }
+  }
+
   if (!options.spec) {
-    console.error("Error: Missing required argument --spec <path>");
+    console.error("Error: Missing required argument --spec <path> (or wireparity.config.json)");
     return 2;
   }
 
@@ -163,7 +195,7 @@ Options:
   }
 
   if (runners.length === 0) {
-    console.error("Error: At least one runner must be specified (--ts, --py, or --go)");
+    console.error("Error: At least one runner must be specified (--ts, --py, or --go, or via runners config)");
     return 2;
   }
 
