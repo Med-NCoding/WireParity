@@ -8,6 +8,9 @@ export interface ParityReportItem {
   diffs: SemanticDiff[];
   minimizedReproducer?: Record<string, unknown>;
   shrinkingSteps?: number;
+  seed?: number;
+  path?: string;
+  replayToken?: string;
   durationMs: number;
 }
 
@@ -43,6 +46,10 @@ export function formatTerminalReport(report: ParityReport): string {
         lines.push(`    ${diff.sdkB}: ${JSON.stringify(diff.actual)}`);
       }
 
+      if (item.replayToken) {
+        lines.push(`\n  Replay Token: ${item.replayToken}`);
+      }
+
       if (item.minimizedReproducer) {
         lines.push(`\n  Minimal Reproducible Input (after ${item.shrinkingSteps ?? 0} shrink steps):`);
         lines.push(`  ${JSON.stringify(item.minimizedReproducer, null, 2)}`);
@@ -61,3 +68,4 @@ export function formatTerminalReport(report: ParityReport): string {
 
   return lines.join("\n");
 }
+

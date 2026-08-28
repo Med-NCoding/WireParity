@@ -1,12 +1,11 @@
 import { compareRequests } from "../comparator/diff.js";
-import { SchemaValueGenerator, SeededPRNG } from "../generator/index.js";
 import type { IRDocument, IROperation, IRValueRecord } from "../ir/index.js";
+import type { OperationInputs } from "../ir/inputs.js";
 import { normalizeRequest } from "../normalization/normalizer.js";
 import type { SDKRunner } from "../runners/types.js";
-import { shrinkCounterexample } from "../shrinker/engine.js";
+import { runOperationParityTest, operationInputsToRecord } from "../shrinker/fast_check_shrink.js";
 import type { ParityReport, ParityReportItem } from "./terminal.js";
 import { startCaptureServer } from "../capture/server.js";
-import { irRecordToJs } from "../runners/translator.js";
 
 export interface SuiteRunnerOptions {
   seed?: string | number;
@@ -23,25 +22,18 @@ export async function runParitySuite(
   options: SuiteRunnerOptions = {}
 ): Promise<ParityReport> {
   const seed = options.seed ?? "wireparity-seed";
-  const prng = new SeededPRNG(seed);
-  const generator = new SchemaValueGenerator(prng);
   const captureServer = await startCaptureServer();
   const results: ParityReportItem[] = [];
 
   try {
     for (const operation of doc.operations) {
-      const opStartTime = Date.now();
-
-      // Build composite input schema for the operation (path, query, header, body)
-      const input = generateOperationInput(operation, generator);
-
-      // Execute on all runners and capture requests
-      const testPredicate = async (candidateInput: IRValueRecord) => {
+      const testPredicate = async (candidateInput: OperationInputs) => {
         const sdkNormalizedRequests: Record<string, ReturnType<typeof normalizeRequest>> = {};
 
         for (const runner of runners) {
           captureServer.clear();
-          await runner.execute(operation, candidateInput, captureServer.url);
+          const flatRecord = operationInputsToRecord(candidateInput);
+          await runner.execute(operation, flatRecord, captureServer.url);
           const reqs = captureServer.getRequests();
           if (reqs.length > 0) {
             sdkNormalizedRequests[runner.language] = normalizeRequest(reqs[0]);
@@ -51,34 +43,32 @@ export async function runParitySuite(
         return compareRequests(sdkNormalizedRequests);
       };
 
-      const comparison = await testPredicate(input);
+      const iterations = options.iterationsPerOperation ?? 5;
+      const testResult = await runOperationParityTest(operation, testPredicate, {
+        seed,
+        numRuns: iterations,
+        endOnFailure: true,
+      });
 
-      if (!comparison.hasDivergence) {
+      if (!testResult.hasDivergence) {
         results.push({
           operationId: operation.id,
           hasDivergence: false,
           diffs: [],
-          durationMs: Date.now() - opStartTime,
+          seed: testResult.seed,
+          durationMs: testResult.durationMs,
         });
       } else {
-        let minimizedReproducer: Record<string, unknown> | undefined;
-        let shrinkingSteps = 0;
-
-        if (options.shrinkOnFailure !== false) {
-          const shrinkRes = await shrinkCounterexample(operation, input, testPredicate);
-          minimizedReproducer = irRecordToJs(shrinkRes.minimizedInput);
-          shrinkingSteps = shrinkRes.steps;
-        } else {
-          minimizedReproducer = irRecordToJs(input);
-        }
-
         results.push({
           operationId: operation.id,
           hasDivergence: true,
-          diffs: comparison.diffs,
-          minimizedReproducer,
-          shrinkingSteps,
-          durationMs: Date.now() - opStartTime,
+          diffs: testResult.diffs,
+          minimizedReproducer: testResult.minimizedReproducer,
+          shrinkingSteps: testResult.numShrinks,
+          seed: testResult.seed,
+          path: testResult.path,
+          replayToken: testResult.replayToken,
+          durationMs: testResult.durationMs,
         });
       }
     }
@@ -99,24 +89,3 @@ export async function runParitySuite(
   };
 }
 
-function generateOperationInput(
-  operation: IROperation,
-  generator: SchemaValueGenerator
-): IRValueRecord {
-  const inputs: IRValueRecord = {};
-
-  // Parameters (path, query, headers)
-  for (const param of operation.parameters) {
-    inputs[param.name] = generator.generate(param.schema);
-  }
-
-  // Body
-  if (operation.requestBody) {
-    const jsonMediaType = operation.requestBody.content["application/json"];
-    if (jsonMediaType) {
-      inputs.body = generator.generate(jsonMediaType.schema);
-    }
-  }
-
-  return inputs;
-}
