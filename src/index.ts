@@ -14,4 +14,6 @@ export * from "./generator/index.js";
 export * from "./shrinker/index.js";
 export * from "./reporter/index.js";
 export * from "./cli/index.js";
+export * from "./telemetry/index.js";
+
 
