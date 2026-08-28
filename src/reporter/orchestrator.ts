@@ -45,14 +45,20 @@ export async function runParitySuite(
       const testPredicate = async (candidateInput: OperationInputs) => {
         const sdkNormalizedRequests: Record<string, NormalizedRequest> = {};
 
-        for (const runner of runners) {
+        for (let i = 0; i < runners.length; i++) {
+          const runner = runners[i]!;
+          const runnerKey = runners.filter((r) => r.language === runner.language).length > 1
+            ? `${runner.language}_${i + 1}`
+            : runner.language;
+
           captureServer.clear();
           await runner.execute(operation, candidateInput, captureServer.url);
           const reqs = captureServer.getRequests();
           if (reqs.length > 0) {
-            sdkNormalizedRequests[runner.language] = normalizeContractRequest(reqs[0]!, operation);
+            sdkNormalizedRequests[runnerKey] = normalizeContractRequest(reqs[0]!, operation);
           }
         }
+
 
         return compareRequests(sdkNormalizedRequests);
       };
