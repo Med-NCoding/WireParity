@@ -5,15 +5,22 @@ import { normalizeContractRequest } from "../normalization/normalizer.js";
 import type { NormalizedRequest } from "../normalization/types.js";
 import type { SDKRunner } from "../runners/types.js";
 import { runOperationParityTest, operationInputsToRecord } from "../shrinker/fast_check_shrink.js";
+import { decodeReplayToken } from "../generator/seed.js";
 import type { ParityReport, ParityReportItem } from "./terminal.js";
 import { startCaptureServer } from "../capture/server.js";
 
 
 
+
+
 export interface SuiteRunnerOptions {
   seed?: string | number;
+  replayPath?: string;
+  replayToken?: string;
   iterationsPerOperation?: number;
   shrinkOnFailure?: boolean;
+  bail?: boolean;
+  operations?: string[];
 }
 
 /**
@@ -28,8 +35,13 @@ export async function runParitySuite(
   const captureServer = await startCaptureServer();
   const results: ParityReportItem[] = [];
 
+  const targetOperations =
+    options.operations && options.operations.length > 0
+      ? doc.operations.filter((op) => options.operations!.includes(op.id))
+      : doc.operations;
+
   try {
-    for (const operation of doc.operations) {
+    for (const operation of targetOperations) {
       const testPredicate = async (candidateInput: OperationInputs) => {
         const sdkNormalizedRequests: Record<string, NormalizedRequest> = {};
 
@@ -42,17 +54,25 @@ export async function runParitySuite(
           }
         }
 
-
         return compareRequests(sdkNormalizedRequests);
       };
 
+      let replaySeed = seed;
+      let replayPath = options.replayPath;
+      if (options.replayToken) {
+        const decoded = decodeReplayToken(options.replayToken);
+        replaySeed = decoded.seed;
+        replayPath = decoded.path;
+      }
 
       const iterations = options.iterationsPerOperation ?? 5;
       const testResult = await runOperationParityTest(operation, testPredicate, {
-        seed,
+        seed: replaySeed,
+        path: replayPath,
         numRuns: iterations,
         endOnFailure: true,
       });
+
 
       if (!testResult.hasDivergence) {
         results.push({
@@ -74,11 +94,16 @@ export async function runParitySuite(
           replayToken: testResult.replayToken,
           durationMs: testResult.durationMs,
         });
+
+        if (options.bail) {
+          break;
+        }
       }
     }
   } finally {
     await captureServer.close();
   }
+
 
   const passedOperations = results.filter((r) => !r.hasDivergence).length;
   const divergentOperations = results.length - passedOperations;
