@@ -1,11 +1,14 @@
 import { compareRequests } from "../comparator/diff.js";
-import type { IRDocument, IROperation, IRValueRecord } from "../ir/index.js";
+import type { IRDocument } from "../ir/index.js";
 import type { OperationInputs } from "../ir/inputs.js";
-import { normalizeRequest } from "../normalization/normalizer.js";
+import { normalizeContractRequest } from "../normalization/normalizer.js";
+import type { NormalizedRequest } from "../normalization/types.js";
 import type { SDKRunner } from "../runners/types.js";
 import { runOperationParityTest, operationInputsToRecord } from "../shrinker/fast_check_shrink.js";
 import type { ParityReport, ParityReportItem } from "./terminal.js";
 import { startCaptureServer } from "../capture/server.js";
+
+
 
 export interface SuiteRunnerOptions {
   seed?: string | number;
@@ -28,20 +31,21 @@ export async function runParitySuite(
   try {
     for (const operation of doc.operations) {
       const testPredicate = async (candidateInput: OperationInputs) => {
-        const sdkNormalizedRequests: Record<string, ReturnType<typeof normalizeRequest>> = {};
+        const sdkNormalizedRequests: Record<string, NormalizedRequest> = {};
 
         for (const runner of runners) {
           captureServer.clear();
-          const flatRecord = operationInputsToRecord(candidateInput);
-          await runner.execute(operation, flatRecord, captureServer.url);
+          await runner.execute(operation, candidateInput, captureServer.url);
           const reqs = captureServer.getRequests();
           if (reqs.length > 0) {
-            sdkNormalizedRequests[runner.language] = normalizeRequest(reqs[0]);
+            sdkNormalizedRequests[runner.language] = normalizeContractRequest(reqs[0]!, operation);
           }
         }
 
+
         return compareRequests(sdkNormalizedRequests);
       };
+
 
       const iterations = options.iterationsPerOperation ?? 5;
       const testResult = await runOperationParityTest(operation, testPredicate, {

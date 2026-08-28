@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import type { OperationInputs } from "../ir/inputs.js";
+import { isOperationInputs, type OperationInputs } from "../ir/inputs.js";
 import type { IROperation, IRValueRecord } from "../ir/index.js";
 import { irRecordToJs } from "./translator.js";
 import {
@@ -40,16 +40,35 @@ export class SubprocessSDKRunner implements SDKRunner {
 
   async execute(
     operation: IROperation,
-    input: IRValueRecord,
+    input: IRValueRecord | OperationInputs,
     targetUrl: string
   ): Promise<RunnerResult> {
-    // Build typed OperationInputs from flat IRValueRecord
-    const operationInputs: OperationInputs = {
-      pathParams: {},
-      queryParams: {},
-      headerParams: {},
-      body: input["body"],
-    };
+    let operationInputs: OperationInputs;
+    if (isOperationInputs(input)) {
+      operationInputs = input;
+    } else {
+      operationInputs = {
+        pathParams: {},
+        queryParams: {},
+        headerParams: {},
+        body: input["body"],
+      };
+
+      for (const param of operation.parameters) {
+        if (input[param.name] !== undefined) {
+          if (param.in === "path") {
+            operationInputs.pathParams[param.name] = input[param.name]!;
+          } else if (param.in === "query") {
+            operationInputs.queryParams[param.name] = input[param.name]!;
+          } else if (param.in === "header") {
+            operationInputs.headerParams[param.name] = input[param.name]!;
+          } else if (param.in === "cookie") {
+            if (!operationInputs.cookieParams) operationInputs.cookieParams = {};
+            operationInputs.cookieParams[param.name] = input[param.name]!;
+          }
+        }
+      }
+    }
 
     const ipcRequest: IPCRequest = {
       operationId: operation.id,
@@ -59,6 +78,7 @@ export class SubprocessSDKRunner implements SDKRunner {
 
     return this._sendRequest(ipcRequest);
   }
+
 
   /**
    * Sends a pre-built IPCRequest to the subprocess and awaits its IPCResponse.

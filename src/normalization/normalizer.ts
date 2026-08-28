@@ -85,3 +85,31 @@ export function normalizeRequest(
     rawBody: raw.body,
   };
 }
+
+import { normalizeHeaders } from "./headers.js";
+import { normalizePathQuery } from "./query_path.js";
+import { normalizeBody } from "./body.js";
+import type { IROperation } from "../ir/operations.js";
+
+/**
+ * Normalizes a raw CapturedRequest against an IROperation contract,
+ * applying contract-aware header normalization (transport noise removal),
+ * path/query normalization (matrix/pipe/form styles), and body normalization.
+ */
+export function normalizeContractRequest(
+  raw: CapturedRequest,
+  operation: IROperation
+): NormalizedRequest {
+  const headers = normalizeHeaders(raw, operation);
+  const { path, query } = normalizePathQuery(raw, operation);
+  const { body, rawBody } = normalizeBody(raw, operation);
+  return {
+    method: raw.method.toUpperCase(),
+    path,
+    query,
+    headers,
+    body,
+    rawBody,
+  };
+}
+

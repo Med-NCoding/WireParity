@@ -22,10 +22,11 @@ export interface SDKRunner {
   language: SDKLanguage;
   execute(
     operation: IROperation,
-    input: IRValueRecord,
+    input: IRValueRecord | OperationInputs,
     targetUrl: string
   ): Promise<RunnerResult>;
 }
+
 
 // ---------------------------------------------------------------------------
 // JSON-lines IPC Protocol (Step 3.1)

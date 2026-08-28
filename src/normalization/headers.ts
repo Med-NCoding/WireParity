@@ -86,6 +86,12 @@ export function normalizeHeaders(
       continue;
     }
 
+    // Node.js undici fetch automatically injects 'accept-language: *' by default when omitted.
+    if (lowerKey === "accept-language" && String(value).trim() === "*") {
+      continue;
+    }
+
+
     // Collapse multi-value headers to comma-separated (RFC 7230 §3.2.2).
     const stringVal = Array.isArray(value)
       ? value.join(", ")
