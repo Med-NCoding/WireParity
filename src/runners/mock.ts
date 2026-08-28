@@ -1,5 +1,6 @@
 import type { IROperation, IRValueRecord } from "../ir/index.js";
-import { irRecordToJs } from "./translator.js";
+import { isOperationInputs, type OperationInputs } from "../ir/inputs.js";
+import { irRecordToJs, irValueToJs } from "./translator.js";
 import type { RunnerResult, SDKRunner } from "./types.js";
 
 export type MockSdkInvocationHandler = (
@@ -20,12 +21,22 @@ export class MockSDKRunner implements SDKRunner {
 
   async execute(
     operation: IROperation,
-    input: IRValueRecord,
+    input: IRValueRecord | OperationInputs,
     targetUrl: string
   ): Promise<RunnerResult> {
     const startTime = Date.now();
     try {
-      const jsInputs = irRecordToJs(input);
+      let jsInputs: Record<string, unknown>;
+      if (isOperationInputs(input)) {
+        jsInputs = {
+          ...irRecordToJs(input.pathParams),
+          ...irRecordToJs(input.queryParams),
+          ...irRecordToJs(input.headerParams),
+          body: input.body ? irValueToJs(input.body) : undefined,
+        };
+      } else {
+        jsInputs = irRecordToJs(input);
+      }
       await this.handler(operation, jsInputs, targetUrl);
       return {
         success: true,
@@ -33,6 +44,7 @@ export class MockSDKRunner implements SDKRunner {
         durationMs: Date.now() - startTime,
       };
     } catch (err: unknown) {
+
       return {
         success: false,
         language: this.language,

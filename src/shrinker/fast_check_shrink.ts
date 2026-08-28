@@ -13,9 +13,11 @@ import type { ComparisonResult, SemanticDiff, DivergenceCategory } from "../comp
 import {
   buildFastCheckParameters,
   encodeReplayToken,
+  decodeReplayToken,
   type ReplayDescriptor,
   type ReplayRunnerOptions,
 } from "../generator/seed.js";
+
 import { operationInputsArbitrary } from "../generator/synthesizer.js";
 import type { IROperation } from "../ir/operations.js";
 import type { OperationInputs } from "../ir/inputs.js";
@@ -210,17 +212,19 @@ export async function runOperationParityTest(
 }
 
 /**
- * Replays a failing property test in 1 shot using a captured ReplayDescriptor token.
+ * Replays a failing property test in 1 shot using a captured ReplayDescriptor or replay token string.
  */
 export async function replayOperationParityTest(
   operation: IROperation,
   predicate: ParityTestPredicate,
-  replay: ReplayDescriptor
+  replay: ReplayDescriptor | string
 ): Promise<FastCheckOperationResult> {
+  const descriptor = typeof replay === "string" ? decodeReplayToken(replay) : replay;
   return runOperationParityTest(operation, predicate, {
-    seed: replay.seed,
-    path: replay.path,
+    seed: descriptor.seed,
+    path: descriptor.path,
     numRuns: 1,
     endOnFailure: true,
   });
 }
+

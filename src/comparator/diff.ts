@@ -1,6 +1,8 @@
 import type { NormalizedRequest } from "../normalization/types.js";
 import { classifyDivergence } from "./classifier.js";
+import { classifyCaseLeakOnKey, normaliseIdentifier } from "./classifiers/null_and_case.js";
 import type { ComparisonResult, SemanticDiff } from "./types.js";
+
 
 /**
  * Compares two or more normalized requests from different SDK runs
@@ -159,15 +161,63 @@ function diffBodies(
   ) {
     const objA = bodyA as Record<string, unknown>;
     const objB = bodyB as Record<string, unknown>;
-    const allKeys = Array.from(new Set([...Object.keys(objA), ...Object.keys(objB)]));
+    const keysA = Object.keys(objA);
+    const keysB = Object.keys(objB);
+    const allKeys = Array.from(new Set([...keysA, ...keysB]));
+    const handledKeys = new Set<string>();
 
     for (const key of allKeys) {
+      if (handledKeys.has(key)) continue;
+
+      const hasInA = Object.prototype.hasOwnProperty.call(objA, key);
+      const hasInB = Object.prototype.hasOwnProperty.call(objB, key);
+
+      if (hasInA && !hasInB) {
+        const leak = classifyCaseLeakOnKey(`${path}.${key}`, key, keysB, sdkA, sdkB);
+        if (leak) {
+          diffs.push({
+            category: leak.category,
+            severity: leak.severity,
+            location: "body",
+            path: `${path}.${key}`,
+            message: leak.message,
+            expected: objA[key],
+            actual: undefined,
+            sdkA,
+            sdkB,
+          });
+          for (const kb of keysB) {
+            if (normaliseIdentifier(kb) === normaliseIdentifier(key)) {
+              handledKeys.add(kb);
+            }
+          }
+          continue;
+        }
+      } else if (!hasInA && hasInB) {
+        const leak = classifyCaseLeakOnKey(`${path}.${key}`, key, keysA, sdkB, sdkA);
+        if (leak) {
+          diffs.push({
+            category: leak.category,
+            severity: leak.severity,
+            location: "body",
+            path: `${path}.${key}`,
+            message: leak.message,
+            expected: undefined,
+            actual: objB[key],
+            sdkA,
+            sdkB,
+          });
+          continue;
+        }
+      }
+
       const valA = objA[key];
       const valB = objB[key];
       diffBodies(valA, valB, `${path}.${key}`, sdkA, sdkB, diffs);
     }
     return;
   }
+
 
   if (Array.isArray(bodyA) && Array.isArray(bodyB)) {
     const maxLen = Math.max(bodyA.length, bodyB.length);
