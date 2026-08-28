@@ -4,3 +4,5 @@ dist
 *.log
 fixtures/sdks/typescript/
 fixtures/sdks/python/
+fixtures/sdks/go/
+

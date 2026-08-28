@@ -37,6 +37,7 @@ let ir: IRDocument;
 let openApiToolsConfig: unknown;
 let tsConfig: unknown;
 let pythonConfig: unknown;
+let goConfig: unknown;
 
 beforeAll(() => {
   petStoreRaw = loadJSON("fixtures/specs/petstore.json");
@@ -44,7 +45,9 @@ beforeAll(() => {
   openApiToolsConfig = loadJSON("fixtures/sdks/configs/openapitools.json");
   tsConfig = loadJSON("fixtures/sdks/configs/ts.json");
   pythonConfig = loadJSON("fixtures/sdks/configs/python.json");
+  goConfig = loadJSON("fixtures/sdks/configs/go.json");
 });
+
 
 // ---------------------------------------------------------------------------
 // 1. Root validation
@@ -255,6 +258,17 @@ describe("fixtures/sdks/configs/openapitools.json – generator config", () => {
     expect(py.output).toBe("fixtures/sdks/python");
     expect(py.inputSpec).toBe("fixtures/specs/petstore.json");
   });
+
+  it("contains a 'go-petstore' generator entry using 'go'", () => {
+    const cfg = openApiToolsConfig as {
+      generators: Record<string, { generatorName: string; output: string; inputSpec: string }>;
+    };
+    const go = cfg.generators["go-petstore"];
+    expect(go).toBeDefined();
+    expect(go.generatorName).toBe("go");
+    expect(go.output).toBe("fixtures/sdks/go");
+    expect(go.inputSpec).toBe("fixtures/specs/petstore.json");
+  });
 });
 
 describe("fixtures/sdks/configs/ts.json – TypeScript generator config", () => {
@@ -277,3 +291,13 @@ describe("fixtures/sdks/configs/python.json – Python generator config", () => 
     expect(cfg.library).toBe("urllib3");
   });
 });
+
+describe("fixtures/sdks/configs/go.json – Go generator config", () => {
+  it("is valid JSON with packageName and withGoMod fields", () => {
+    const cfg = goConfig as { packageName: string; withGoMod: boolean; isGoSubmodule: boolean };
+    expect(cfg.packageName).toBe("petstore");
+    expect(cfg.withGoMod).toBe(true);
+    expect(cfg.isGoSubmodule).toBe(true);
+  });
+});
+

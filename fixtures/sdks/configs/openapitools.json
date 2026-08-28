@@ -26,6 +26,18 @@
         "apis": "",
         "supportingFiles": ""
       }
+    },
+    "go-petstore": {
+      "generatorName": "go",
+      "output": "fixtures/sdks/go",
+      "inputSpec": "fixtures/specs/petstore.json",
+      "configFile": "fixtures/sdks/configs/go.json",
+      "globalProperty": {
+        "models": "",
+        "apis": "",
+        "supportingFiles": ""
+      }
     }
   }
 }
+

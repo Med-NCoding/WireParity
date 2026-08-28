@@ -1,0 +1,7 @@
+{
+  "packageName": "petstore",
+  "packageVersion": "1.0.0",
+  "isGoSubmodule": true,
+  "withGoMod": true,
+  "enumClassPrefix": true
+}
