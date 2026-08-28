@@ -93,12 +93,18 @@ export function normalizeHeaders(
 
 
     // Collapse multi-value headers to comma-separated (RFC 7230 §3.2.2).
-    const stringVal = Array.isArray(value)
+    let stringVal = Array.isArray(value)
       ? value.join(", ")
       : String(value);
+
+    // Normalize Content-Type header to standard media type (e.g. "application/json; charset=utf-8" -> "application/json")
+    if (lowerKey === "content-type" && stringVal.includes(";")) {
+      stringVal = stringVal.split(";")[0]!.trim().toLowerCase();
+    }
 
     normalized[lowerKey] = stringVal.trim();
   }
 
   return normalized;
 }
+
