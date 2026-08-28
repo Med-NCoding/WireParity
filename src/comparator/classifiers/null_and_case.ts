@@ -15,15 +15,9 @@
  * branching at the call site.
  */
 
-import type { DivergenceCategory, DiffSeverity } from "../types.js";
+import type { DivergenceCategory, DiffSeverity, ClassificationResult } from "../types.js";
+export type { ClassificationResult };
 
-// ─── Shared Result Type ───────────────────────────────────────────────────────
-
-export interface ClassificationResult {
-  category: DivergenceCategory;
-  severity: DiffSeverity;
-  message: string;
-}
 
 // ─── OPTIONAL_VS_NULL Classifier ─────────────────────────────────────────────
 

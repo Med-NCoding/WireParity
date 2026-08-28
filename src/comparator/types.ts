@@ -32,6 +32,13 @@ export interface SemanticDiff {
   sdkB: string;
 }
 
+export interface ClassificationResult {
+  category: DivergenceCategory;
+  severity: DiffSeverity;
+  message: string;
+}
+
+
 export interface ComparisonResult {
   hasDivergence: boolean;
   diffs: SemanticDiff[];
