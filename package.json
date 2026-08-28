@@ -5,7 +5,11 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "wireparity": "./dist/cli/bin.js"
+  },
   "scripts": {
+
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
