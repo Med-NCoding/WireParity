@@ -1,0 +1,126 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Deep Edge-Case Parity Stress Suite",
+    "description": "High-complexity OpenAPI specification designed with edge-case-heavy schemas to expose language-specific serialization divergences",
+    "version": "2.0.0"
+  },
+  "paths": {
+    "/v2/complex/records/{record_id}": {
+      "post": {
+        "operationId": "createComplexRecord",
+        "parameters": [
+          {
+            "name": "record_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          },
+          {
+            "name": "filter_flags",
+            "in": "query",
+            "style": "pipeDelimited",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "minItems": 2,
+              "items": { "type": "string" }
+            }
+
+          },
+          {
+            "name": "status_codes",
+            "in": "query",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": { "type": "integer" }
+            }
+          },
+          {
+            "name": "X-API-Version",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["accountNumber", "createdAt", "state"],
+                "properties": {
+                  "accountNumber": { "type": "string" },
+                  "tax_id": { "type": "string", "nullable": true },
+                  "SecondaryAddress": {
+                    "type": "object",
+                    "nullable": true,
+                    "properties": {
+                      "street_line1": { "type": "string" },
+                      "postalCode": { "type": "string", "nullable": true }
+                    }
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": ["PENDING_VERIFICATION", "ACTIVE", "SUSPENDED", "ARCHIVED"]
+                  },
+                  "createdAt": { "type": "string", "format": "date-time" },
+                  "effectiveDate": { "type": "string", "format": "date", "nullable": true },
+                  "maxTransactionLimit": { "type": "integer", "format": "int64" },
+                  "riskScore": { "type": "number", "format": "float" },
+                  "featureFlags": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": { "type": "string" }
+                  },
+                  "matrixConfig": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": { "type": "integer" }
+                    }
+                  },
+                  "customMetadata": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" },
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      },
+      "get": {
+        "operationId": "getComplexRecord",
+        "parameters": [
+          {
+            "name": "record_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "expand_relations",
+            "in": "query",
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    }
+  }
+}
