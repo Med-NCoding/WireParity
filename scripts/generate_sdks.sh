@@ -92,7 +92,7 @@ echo ""
 # ---------------------------------------------------------------------------
 # Verification — assert expected entry points exist
 # ---------------------------------------------------------------------------
-TS_ENTRY="$TS_OUT/index.ts"
+TS_ENTRY="$TS_OUT/src/index.ts"
 PY_INIT="$PY_OUT/wireparity_petstore/__init__.py"
 GO_CLIENT="$GO_OUT/client.go"
 
