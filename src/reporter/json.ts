@@ -41,6 +41,7 @@ export interface JsonReportOperation {
   operationId: string;
   status: "passed" | "failed";
   hasDivergence: boolean;
+  executionError?: string;
   durationMs: number;
   divergences: JsonReportDivergence[];
   replay?: JsonReportReplay;
@@ -94,7 +95,8 @@ export function buildJsonReportObject(
       : 1.0;
 
   const operations: JsonReportOperation[] = report.results.map((item) => {
-    const opStatus: "passed" | "failed" = item.hasDivergence ? "failed" : "passed";
+    const isFailed = item.hasDivergence || !!item.executionError;
+    const opStatus: "passed" | "failed" = isFailed ? "failed" : "passed";
 
     const divergences: JsonReportDivergence[] = item.diffs.map((diff) => ({
       category: diff.category,
@@ -125,12 +127,13 @@ export function buildJsonReportObject(
     return {
       operationId: item.operationId,
       status: opStatus,
-      hasDivergence: item.hasDivergence,
+      hasDivergence: item.hasDivergence || !!item.executionError,
       durationMs: item.durationMs,
       divergences,
       replay,
       minimizedReproducer: item.minimizedReproducer,
       shrinkingSteps: item.shrinkingSteps,
+      ...(item.executionError ? { executionError: item.executionError } : {}),
     };
   });
 

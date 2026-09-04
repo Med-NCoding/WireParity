@@ -42,6 +42,8 @@ export async function runParitySuite(
 
   try {
     for (const operation of targetOperations) {
+      let operationExecutionError: string | undefined;
+
       const testPredicate = async (candidateInput: OperationInputs) => {
         const sdkNormalizedRequests: Record<string, NormalizedRequest> = {};
 
@@ -52,13 +54,106 @@ export async function runParitySuite(
             : runner.language;
 
           captureServer.clear();
-          await runner.execute(operation, candidateInput, captureServer.url);
-          const reqs = captureServer.getRequests();
-          if (reqs.length > 0) {
-            sdkNormalizedRequests[runnerKey] = normalizeContractRequest(reqs[0]!, operation);
+          let runnerResult;
+          try {
+            runnerResult = await runner.execute(operation, candidateInput, captureServer.url);
+          } catch (err: unknown) {
+            const errorMsg = `Runner '${runnerKey}' threw an error: ${err instanceof Error ? err.message : String(err)}`;
+            operationExecutionError = errorMsg;
+            return {
+              hasDivergence: true,
+              executionError: errorMsg,
+              diffs: [
+                {
+                  category: "RUNNER_EXECUTION_ERROR" as const,
+                  severity: "critical" as const,
+                  location: "method" as const,
+                  path: operation.path,
+                  message: errorMsg,
+                  expected: `Successful execution from ${runnerKey}`,
+                  actual: `Execution error: ${errorMsg}`,
+                  sdkA: runnerKey,
+                  sdkB: "capture_server",
+                },
+              ],
+              sdkRequests: sdkNormalizedRequests,
+            };
           }
+
+          if (!runnerResult.success) {
+            const errorMsg = runnerResult.error
+              ? `Runner '${runnerKey}' failed: ${runnerResult.error}`
+              : `Runner '${runnerKey}' returned success: false`;
+            operationExecutionError = errorMsg;
+            return {
+              hasDivergence: true,
+              executionError: errorMsg,
+              diffs: [
+                {
+                  category: "RUNNER_EXECUTION_ERROR" as const,
+                  severity: "critical" as const,
+                  location: "method" as const,
+                  path: operation.path,
+                  message: errorMsg,
+                  expected: `Successful execution from ${runnerKey}`,
+                  actual: `Execution error: ${errorMsg}`,
+                  sdkA: runnerKey,
+                  sdkB: "capture_server",
+                },
+              ],
+              sdkRequests: sdkNormalizedRequests,
+            };
+          }
+
+          const reqs = captureServer.getRequests();
+          if (reqs.length === 0) {
+            const errorMsg = `Runner '${runnerKey}' produced no captured HTTP request for operation '${operation.id}'`;
+            operationExecutionError = errorMsg;
+            return {
+              hasDivergence: true,
+              executionError: errorMsg,
+              diffs: [
+                {
+                  category: "RUNNER_EXECUTION_ERROR" as const,
+                  severity: "critical" as const,
+                  location: "method" as const,
+                  path: operation.path,
+                  message: errorMsg,
+                  expected: `Captured HTTP request from ${runnerKey}`,
+                  actual: "Zero requests captured",
+                  sdkA: runnerKey,
+                  sdkB: "capture_server",
+                },
+              ],
+              sdkRequests: sdkNormalizedRequests,
+            };
+          }
+
+          sdkNormalizedRequests[runnerKey] = normalizeContractRequest(reqs[0]!, operation);
         }
 
+        if (Object.keys(sdkNormalizedRequests).length < runners.length) {
+          const errorMsg = `Fewer runners emitted requests than expected for operation '${operation.id}': received ${Object.keys(sdkNormalizedRequests).length} of ${runners.length}`;
+          operationExecutionError = errorMsg;
+          return {
+            hasDivergence: true,
+            executionError: errorMsg,
+            diffs: [
+              {
+                category: "RUNNER_EXECUTION_ERROR" as const,
+                severity: "critical" as const,
+                location: "method" as const,
+                path: operation.path,
+                message: errorMsg,
+                expected: `${runners.length} runners`,
+                actual: `${Object.keys(sdkNormalizedRequests).length} runners`,
+                sdkA: "all_runners",
+                sdkB: "capture_server",
+              },
+            ],
+            sdkRequests: sdkNormalizedRequests,
+          };
+        }
 
         return compareRequests(sdkNormalizedRequests);
       };
@@ -79,8 +174,12 @@ export async function runParitySuite(
         endOnFailure: true,
       });
 
+      const execError =
+        operationExecutionError ??
+        testResult.executionError ??
+        testResult.diffs.find((d) => d.category === "RUNNER_EXECUTION_ERROR")?.message;
 
-      if (!testResult.hasDivergence) {
+      if (!testResult.hasDivergence && !execError) {
         results.push({
           operationId: operation.id,
           hasDivergence: false,
@@ -89,10 +188,29 @@ export async function runParitySuite(
           durationMs: testResult.durationMs,
         });
       } else {
+        const diffs =
+          testResult.diffs.length > 0
+            ? testResult.diffs
+            : execError
+              ? [
+                  {
+                    category: "RUNNER_EXECUTION_ERROR" as const,
+                    severity: "critical" as const,
+                    location: "method" as const,
+                    path: operation.path,
+                    message: execError,
+                    expected: "Successful execution",
+                    actual: `Execution error: ${execError}`,
+                    sdkA: "all_runners",
+                    sdkB: "capture_server",
+                  },
+                ]
+              : [];
         results.push({
           operationId: operation.id,
           hasDivergence: true,
-          diffs: testResult.diffs,
+          executionError: execError,
+          diffs,
           minimizedReproducer: testResult.minimizedReproducer,
           shrinkingSteps: testResult.numShrinks,
           seed: testResult.seed,
@@ -110,8 +228,7 @@ export async function runParitySuite(
     await captureServer.close();
   }
 
-
-  const passedOperations = results.filter((r) => !r.hasDivergence).length;
+  const passedOperations = results.filter((r) => !r.hasDivergence && !r.executionError).length;
   const divergentOperations = results.length - passedOperations;
 
   return {

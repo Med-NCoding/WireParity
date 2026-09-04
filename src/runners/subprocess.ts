@@ -128,7 +128,7 @@ export class SubprocessSDKRunner implements SDKRunner {
         }
       }, timeoutMs);
 
-      child.on("close", (code: number | null) => {
+      child.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
@@ -138,12 +138,13 @@ export class SubprocessSDKRunner implements SDKRunner {
         // Parse the first non-empty JSON line from stdout as IPCResponse
         const firstLine = stdoutBuf.split("\n").find((l) => l.trim().length > 0) ?? "";
 
-        if (code !== 0 && firstLine.length === 0) {
+        if ((code !== 0 || signal !== null) && firstLine.length === 0) {
+          const exitReason = signal ? `Subprocess killed with signal ${signal}` : `Subprocess exited with code ${code}`;
           resolve({
             success: false,
             language: this.language,
             durationMs,
-            error: stderrBuf.trim() || `Subprocess exited with code ${code}`,
+            error: stderrBuf.trim() || exitReason,
             rawOutput: stdoutBuf,
           });
           return;
@@ -163,11 +164,15 @@ export class SubprocessSDKRunner implements SDKRunner {
           return;
         }
 
+        const isSuccess = ipcResponse.success && code === 0 && signal === null;
+        const exitError = signal ? `Subprocess killed with signal ${signal}` : `Subprocess exited with code ${code}`;
+        const finalError = ipcResponse.error ?? (isSuccess ? undefined : (stderrBuf.trim() || exitError));
+
         resolve({
-          success: ipcResponse.success,
+          success: isSuccess,
           language: this.language,
           durationMs,
-          error: ipcResponse.error ?? (ipcResponse.success ? undefined : `Subprocess exited with code ${code}`),
+          error: finalError,
           rawOutput: stdoutBuf,
           ipcResponse,
         });

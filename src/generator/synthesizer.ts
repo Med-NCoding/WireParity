@@ -13,6 +13,22 @@ import { SeededPRNG } from "./prng.js";
  * Required parameters are always generated.
  * Optional parameters are generated with weighted presence or omitted.
  */
+function sanitizeHeaderString(s: string): string {
+  return s
+    .replace(/[\0\r\n]/g, "")
+    .replace(/[^\x20-\x7E\t\xA0-\xFF]/g, "");
+}
+
+function sanitizeHeaderIRValue(val: IRValue): IRValue {
+  if (val.kind === "string") {
+    return { ...val, value: sanitizeHeaderString(val.value) };
+  }
+  if (val.kind === "array") {
+    return { ...val, items: val.items.map(sanitizeHeaderIRValue) };
+  }
+  return val;
+}
+
 function buildParamsArbitrary(
   params: IRParameter[]
 ): fc.Arbitrary<Record<string, IRValue>> {
@@ -23,7 +39,10 @@ function buildParamsArbitrary(
   type ParamOption = IRValue | undefined;
 
   const perParamArbs: fc.Arbitrary<{ name: string; value: ParamOption }>[] = params.map((p) => {
-    const valArb = irValueArbitrary(p.schema);
+    let valArb = irValueArbitrary(p.schema);
+    if (p.in === "header") {
+      valArb = valArb.map(sanitizeHeaderIRValue);
+    }
     if (p.required) {
       return valArb.map((v) => ({ name: p.name, value: v }));
     } else {

@@ -38,6 +38,7 @@ export interface FastCheckParityOptions extends ReplayRunnerOptions {
 export interface FastCheckOperationResult {
   operationId: string;
   hasDivergence: boolean;
+  executionError?: string;
   seed: number;
   path?: string;
   replayToken?: string;
@@ -122,21 +123,30 @@ export async function runOperationParityTest(
 
   let initialFailureCategory: DivergenceCategory | undefined;
   let initialFailureDiffs: SemanticDiff[] = [];
+  let initialExecutionError: string | undefined;
 
   const property = fc.asyncProperty(arbitrary, async (inputs) => {
-    const comp = await predicate(inputs);
-    if (comp.hasDivergence) {
-      if (!initialFailureCategory && comp.diffs.length > 0) {
-        initialFailureCategory = comp.diffs[0]?.category;
-        initialFailureDiffs = comp.diffs;
+    try {
+      const comp = await predicate(inputs);
+      if (comp.hasDivergence) {
+        if (!initialFailureCategory && comp.diffs.length > 0) {
+          initialFailureCategory = comp.diffs[0]?.category;
+          initialFailureDiffs = comp.diffs;
+        }
+        if (!initialExecutionError && comp.executionError) {
+          initialExecutionError = comp.executionError;
+        }
+        // If user specified a target category, only fail if category matches
+        if (options.targetCategory && comp.diffs[0]?.category !== options.targetCategory) {
+          return true;
+        }
+        return false; // failure triggers shrinking
       }
-      // If user specified a target category, only fail if category matches
-      if (options.targetCategory && comp.diffs[0]?.category !== options.targetCategory) {
-        return true;
-      }
-      return false; // failure triggers shrinking
+      return true;
+    } catch (err: unknown) {
+      initialExecutionError = err instanceof Error ? err.message : String(err);
+      return false;
     }
-    return true;
   });
 
   const params = buildFastCheckParameters({
@@ -175,16 +185,24 @@ export async function runOperationParityTest(
       : undefined;
 
   let finalDiffs: SemanticDiff[] = initialFailureDiffs;
+  let finalExecutionError: string | undefined = initialExecutionError;
   let preservedCategory = true;
 
   if (counterexample) {
-    // Run predicate one final time on the minimal counterexample to capture exact diffs
-    const finalComp = await predicate(counterexample);
-    if (finalComp.hasDivergence) {
-      finalDiffs = finalComp.diffs;
-      if (initialFailureCategory) {
-        preservedCategory = finalDiffs.some((d) => d.category === initialFailureCategory);
+    try {
+      // Run predicate one final time on the minimal counterexample to capture exact diffs
+      const finalComp = await predicate(counterexample);
+      if (finalComp.hasDivergence) {
+        finalDiffs = finalComp.diffs;
+        if (finalComp.executionError) {
+          finalExecutionError = finalComp.executionError;
+        }
+        if (initialFailureCategory) {
+          preservedCategory = finalDiffs.some((d) => d.category === initialFailureCategory);
+        }
       }
+    } catch (err: unknown) {
+      finalExecutionError = err instanceof Error ? err.message : String(err);
     }
   }
 
@@ -197,6 +215,7 @@ export async function runOperationParityTest(
   return {
     operationId: operation.id,
     hasDivergence: true,
+    executionError: finalExecutionError,
     seed: out.seed,
     path: failOut.counterexamplePath,
     replayToken,
@@ -207,7 +226,7 @@ export async function runOperationParityTest(
     minimizedReproducer: counterexample ? operationInputsToJs(counterexample) : undefined,
     preservedCategory,
     durationMs,
-    error: failOut.error,
+    error: failOut.error ?? finalExecutionError,
   };
 }
 

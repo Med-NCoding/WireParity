@@ -16,6 +16,7 @@ import type { SemanticDiff } from "../comparator/types.js";
 export interface ParityReportItem {
   operationId: string;
   hasDivergence: boolean;
+  executionError?: string;
   diffs: SemanticDiff[];
   minimizedReproducer?: Record<string, unknown>;
   shrinkingSteps?: number;
@@ -72,7 +73,7 @@ export function formatOperationItem(
   const showReplay = options.showReplayInstructions ?? true;
   const lines: string[] = [];
 
-  if (!item.hasDivergence) {
+  if (!item.hasDivergence && !item.executionError) {
     const badge = colorize("[PASS]", ANSI.green + ANSI.bold, useColors);
     const op = colorize(item.operationId, ANSI.bold, useColors);
     const dur = colorize(`(${item.durationMs}ms)`, ANSI.dim, useColors);
@@ -82,20 +83,30 @@ export function formatOperationItem(
   }
 
   // Failure
-  const badge = colorize("[FAIL]", ANSI.red + ANSI.bold, useColors);
+  const badge = item.executionError
+    ? colorize("[ERROR]", ANSI.red + ANSI.bold, useColors)
+    : colorize("[FAIL]", ANSI.red + ANSI.bold, useColors);
   const op = colorize(item.operationId, ANSI.bold, useColors);
   const dur = colorize(`(${item.durationMs}ms)`, ANSI.dim, useColors);
   lines.push(`\n${badge} Operation: ${op} ${dur}`);
-  lines.push(`  Found ${item.diffs.length} divergence(s):`);
 
-  for (const diff of item.diffs) {
-    const categoryBadge = colorize(`[${diff.category}]`, ANSI.yellow + ANSI.bold, useColors);
-    const location = colorize(diff.path, ANSI.cyan, useColors);
-    const severityTag = diff.severity ? ` (severity: ${diff.severity})` : "";
-    lines.push(`  - ${categoryBadge} ${location}${severityTag}`);
-    lines.push(`    Explanation: ${diff.message}`);
-    lines.push(`    ${diff.sdkA}: ${JSON.stringify(diff.expected)}`);
-    lines.push(`    ${diff.sdkB}: ${JSON.stringify(diff.actual)}`);
+  if (item.executionError) {
+    lines.push(`  ✖ Execution error: ${item.executionError}`);
+  }
+
+  const semanticDiffs = item.diffs.filter((d) => d.category !== "RUNNER_EXECUTION_ERROR");
+  if (semanticDiffs.length > 0) {
+    lines.push(`  Found ${semanticDiffs.length} divergence(s):`);
+
+    for (const diff of semanticDiffs) {
+      const categoryBadge = colorize(`[${diff.category}]`, ANSI.yellow + ANSI.bold, useColors);
+      const location = colorize(diff.path, ANSI.cyan, useColors);
+      const severityTag = diff.severity ? ` (severity: ${diff.severity})` : "";
+      lines.push(`  - ${categoryBadge} ${location}${severityTag}`);
+      lines.push(`    Explanation: ${diff.message}`);
+      lines.push(`    ${diff.sdkA}: ${JSON.stringify(diff.expected)}`);
+      lines.push(`    ${diff.sdkB}: ${JSON.stringify(diff.actual)}`);
+    }
   }
 
   // Replay Metadata

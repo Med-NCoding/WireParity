@@ -16,6 +16,7 @@ export type DivergenceCategory =
   | "ENUM_SERIALIZATION_ERROR"
   | "BODY_TYPE_MISMATCH"
   | "BODY_PROPERTY_MISMATCH"
+  | "RUNNER_EXECUTION_ERROR"
   | "UNKNOWN_SEMANTIC_DIVERGENCE";
 
 export type DiffSeverity = "critical" | "warning" | "info";
@@ -41,6 +42,7 @@ export interface ClassificationResult {
 
 export interface ComparisonResult {
   hasDivergence: boolean;
+  executionError?: string;
   diffs: SemanticDiff[];
   sdkRequests: Record<string, NormalizedRequest>;
 }
