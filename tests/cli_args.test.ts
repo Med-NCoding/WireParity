@@ -5,11 +5,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import fs from "node:fs";
+import os from "node:os";
 import { parseCliArgs, runCLI } from "../src/cli/index.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
 const PETSTORE_PATH = resolve(ROOT, "fixtures/specs/petstore.json");
+const PETSTORE_YAML_PATH = resolve(ROOT, "fixtures/specs/petstore.yaml");
+const PETSTORE_YML_PATH = resolve(ROOT, "fixtures/specs/petstore.yml");
 const TS_RUNNER = `node ${resolve(ROOT, "fixtures/runners/ts_runner.ts")}`;
 const PY_RUNNER = `python3 ${resolve(ROOT, "fixtures/runners/py_runner.py")}`;
 const GO_RUNNER = `node ${resolve(ROOT, "fixtures/runners/go_runner.ts")}`;
@@ -184,6 +188,102 @@ describe("CLI Argument Parser & Flag Handling (Step 9.3)", () => {
       expect(parsed.status).toBe("passed");
       expect(parsed.operations).toHaveLength(1);
       expect(parsed.operations[0].operationId).toBe("deletePet");
+    });
+
+    it("executes targeted operation test with exit code 0 when using YAML spec (.yaml)", async () => {
+      const code = await runCLI([
+        "--spec",
+        PETSTORE_YAML_PATH,
+        "--ts",
+        TS_RUNNER,
+        "--py",
+        PY_RUNNER,
+        "--go",
+        GO_RUNNER,
+        "--operations",
+        "createPet",
+        "--iterations",
+        "2",
+        "--seed",
+        "cli-yaml-test-seed",
+      ]);
+
+      expect(code).toBe(0);
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("[PASS] Operation: createPet"));
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("Status: SUCCESS (100% wire parity)"));
+    });
+
+    it("executes targeted operation test with exit code 0 when using YAML spec (.yml)", async () => {
+      const code = await runCLI([
+        "--spec",
+        PETSTORE_YML_PATH,
+        "--ts",
+        TS_RUNNER,
+        "--py",
+        PY_RUNNER,
+        "--go",
+        GO_RUNNER,
+        "--operations",
+        "createPet",
+        "--iterations",
+        "2",
+        "--seed",
+        "cli-yml-test-seed",
+      ]);
+
+      expect(code).toBe(0);
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("[PASS] Operation: createPet"));
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("Status: SUCCESS (100% wire parity)"));
+    });
+
+    it("outputs machine-readable JSON when --json flag is passed with YAML spec", async () => {
+      const code = await runCLI([
+        "--spec",
+        PETSTORE_YAML_PATH,
+        "--ts",
+        TS_RUNNER,
+        "--py",
+        PY_RUNNER,
+        "--operations",
+        "deletePet",
+        "--iterations",
+        "2",
+        "--json",
+      ]);
+
+      expect(code).toBe(0);
+      const jsonCalls = logSpy.mock.calls.map((c) => c[0]);
+      const jsonOutput = jsonCalls.find((c) => typeof c === "string" && c.includes('"schemaVersion"'));
+      expect(jsonOutput).toBeDefined();
+
+      const parsed = JSON.parse(jsonOutput!);
+      expect(parsed.status).toBe("passed");
+      expect(parsed.operations).toHaveLength(1);
+      expect(parsed.operations[0].operationId).toBe("deletePet");
+    });
+
+    it("returns exit code 2 when YAML spec is malformed", async () => {
+      const tmpFile = resolve(os.tmpdir(), `malformed-${Date.now()}.yaml`);
+      fs.writeFileSync(tmpFile, ":\n\t: invalid-yaml");
+      try {
+        const code = await runCLI(["--spec", tmpFile, "--ts", TS_RUNNER]);
+        expect(code).toBe(2);
+        expect(errSpy).toHaveBeenCalledWith(expect.stringContaining("Error parsing OpenAPI specification"));
+      } finally {
+        fs.rmSync(tmpFile, { force: true });
+      }
+    });
+
+    it("returns exit code 2 when JSON spec is malformed", async () => {
+      const tmpFile = resolve(os.tmpdir(), `malformed-${Date.now()}.json`);
+      fs.writeFileSync(tmpFile, "{ invalid-json");
+      try {
+        const code = await runCLI(["--spec", tmpFile, "--ts", TS_RUNNER]);
+        expect(code).toBe(2);
+        expect(errSpy).toHaveBeenCalledWith(expect.stringContaining("Error parsing OpenAPI specification"));
+      } finally {
+        fs.rmSync(tmpFile, { force: true });
+      }
     });
   });
 });

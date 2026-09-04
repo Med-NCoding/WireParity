@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { OpenAPIParseError, parseOpenAPISpec, validateOpenAPIRoot } from "../src/openapi/parser.js";
+import { OpenAPIParseError, parseOpenAPISpec, parseSpecContent, validateOpenAPIRoot } from "../src/openapi/parser.js";
 import type { IRSchema } from "../src/index.js";
 
 // ---------------------------------------------------------------------------
@@ -379,5 +379,95 @@ describe("OpenAPIParseError", () => {
   it("works with field undefined when not supplied", () => {
     const err = new OpenAPIParseError("unknown error");
     expect(err.field).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// JSON and YAML spec parsing support
+// ---------------------------------------------------------------------------
+describe("parseSpecContent & YAML / JSON spec parsing", () => {
+  const sampleYaml = `
+openapi: 3.0.3
+info:
+  title: Sample YAML API
+  version: 1.0.0
+paths:
+  /ping:
+    get:
+      operationId: getPing
+      responses:
+        "200":
+          description: OK
+`;
+
+  const sampleJson = JSON.stringify({
+    openapi: "3.1.0",
+    info: { title: "Sample JSON API", version: "2.0.0" },
+    paths: {
+      "/health": {
+        get: {
+          operationId: "getHealth",
+          responses: { "200": { description: "OK" } },
+        },
+      },
+    },
+  });
+
+  it("parses valid YAML spec content with .yaml extension hint", () => {
+    const raw = parseSpecContent(sampleYaml, "spec.yaml") as Record<string, unknown>;
+    expect(raw.openapi).toBe("3.0.3");
+    expect((raw.info as Record<string, unknown>).title).toBe("Sample YAML API");
+  });
+
+  it("parses valid YAML spec content with .yml extension hint", () => {
+    const raw = parseSpecContent(sampleYaml, "spec.yml") as Record<string, unknown>;
+    expect(raw.openapi).toBe("3.0.3");
+    expect((raw.info as Record<string, unknown>).title).toBe("Sample YAML API");
+  });
+
+  it("parses valid JSON spec content with .json extension hint", () => {
+    const raw = parseSpecContent(sampleJson, "spec.json") as Record<string, unknown>;
+    expect(raw.openapi).toBe("3.1.0");
+    expect((raw.info as Record<string, unknown>).title).toBe("Sample JSON API");
+  });
+
+  it("auto-detects and parses YAML content without extension hint", () => {
+    const raw = parseSpecContent(sampleYaml) as Record<string, unknown>;
+    expect(raw.openapi).toBe("3.0.3");
+    expect((raw.info as Record<string, unknown>).title).toBe("Sample YAML API");
+  });
+
+  it("auto-detects and parses JSON content without extension hint", () => {
+    const raw = parseSpecContent(sampleJson) as Record<string, unknown>;
+    expect(raw.openapi).toBe("3.1.0");
+    expect((raw.info as Record<string, unknown>).title).toBe("Sample JSON API");
+  });
+
+  it("throws error for malformed JSON with .json hint", () => {
+    expect(() => parseSpecContent("{ invalid json", "spec.json")).toThrow();
+  });
+
+  it("throws error for malformed YAML with .yaml hint", () => {
+    expect(() => parseSpecContent(":\n\t: invalid yaml", "spec.yaml")).toThrow();
+  });
+
+  it("allows parseOpenAPISpec to directly parse a YAML string", () => {
+    const ir = parseOpenAPISpec(sampleYaml);
+    expect(ir.title).toBe("Sample YAML API");
+    expect(ir.version).toBe("1.0.0");
+    expect(ir.operations).toHaveLength(1);
+    expect(ir.operations[0].id).toBe("getPing");
+  });
+
+  it("allows parseOpenAPISpec to directly parse a JSON string", () => {
+    const ir = parseOpenAPISpec(sampleJson);
+    expect(ir.title).toBe("Sample JSON API");
+    expect(ir.version).toBe("2.0.0");
+    expect(ir.operations).toHaveLength(1);
+    expect(ir.operations[0].id).toBe("getHealth");
+  });
+
+  it("throws OpenAPIParseError when parseOpenAPISpec receives invalid string content", () => {
+    expect(() => parseOpenAPISpec(":\n\t: invalid")).toThrow(OpenAPIParseError);
   });
 });

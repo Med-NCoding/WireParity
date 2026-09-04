@@ -1,3 +1,5 @@
+import path from "node:path";
+import { parse as parseYaml } from "yaml";
 import type {
   IRDocument,
   IRHttpMethod,
@@ -97,11 +99,43 @@ export function validateOpenAPIRoot(rawSpec: unknown): OpenAPISpecRaw {
 }
 
 /**
- * Parses an OpenAPI 3.0 or 3.1 specification object into WireParity IRDocument.
+ * Parses raw OpenAPI specification content (JSON or YAML string) into a JavaScript object.
+ * Inspects the file path extension if provided (.yaml, .yml, .json), otherwise tries JSON
+ * and falls back to YAML.
+ */
+export function parseSpecContent(content: string, filePath?: string): unknown {
+  const ext = filePath ? path.extname(filePath).toLowerCase() : "";
+  if (ext === ".yaml" || ext === ".yml") {
+    return parseYaml(content);
+  }
+  if (ext === ".json") {
+    return JSON.parse(content);
+  }
+  try {
+    return JSON.parse(content);
+  } catch {
+    return parseYaml(content);
+  }
+}
+
+/**
+ * Parses an OpenAPI 3.0 or 3.1 specification object or string (JSON/YAML) into WireParity IRDocument.
  * Performs strict root validation before processing; throws OpenAPIParseError on failure.
  */
 export function parseOpenAPISpec(rawSpec: unknown): IRDocument {
-  const doc = validateOpenAPIRoot(rawSpec);
+  let parsedSpec = rawSpec;
+  if (typeof rawSpec === "string") {
+    try {
+      parsedSpec = parseSpecContent(rawSpec);
+    } catch (err: unknown) {
+      throw new OpenAPIParseError(
+        `Failed to parse OpenAPI spec content: ${err instanceof Error ? err.message : String(err)}`,
+        "root"
+      );
+    }
+  }
+
+  const doc = validateOpenAPIRoot(parsedSpec);
 
   const resolver = new OpenAPIRefResolver(doc);
   const servers = doc.servers?.map((s) => s.url) ?? ["/"];

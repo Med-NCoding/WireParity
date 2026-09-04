@@ -13,7 +13,7 @@
 
 import { parseArgs } from "node:util";
 import fs from "node:fs";
-import { parseOpenAPISpec } from "../openapi/index.js";
+import { parseOpenAPISpec, parseSpecContent } from "../openapi/index.js";
 import { formatTerminalReport } from "../reporter/terminal.js";
 import { formatJsonReport } from "../reporter/json.js";
 import { runParitySuite } from "../reporter/orchestrator.js";
@@ -176,7 +176,7 @@ Options:
   let doc;
   try {
     const specContent = fs.readFileSync(options.spec, "utf-8");
-    const rawSpec = JSON.parse(specContent);
+    const rawSpec = parseSpecContent(specContent, options.spec);
     doc = parseOpenAPISpec(rawSpec);
   } catch (err: unknown) {
     console.error(`Error parsing OpenAPI specification: ${err instanceof Error ? err.message : String(err)}`);

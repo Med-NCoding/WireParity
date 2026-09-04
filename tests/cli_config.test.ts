@@ -213,6 +213,29 @@ describe("JSON Configuration File Loader (Step 9.4)", () => {
       expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("Status: SUCCESS (100% wire parity)"));
     });
 
+    it("executes differential test suite using --config flag pointing to a YAML spec", async () => {
+      const configPath = path.join(tmpDir, "wireparity.config.json");
+      const yamlSpecPath = resolve(ROOT, "fixtures/specs/petstore.yaml");
+      const configData = {
+        spec: yamlSpecPath,
+        runners: {
+          typescript: TS_RUNNER,
+          python: PY_RUNNER,
+        },
+        options: {
+          operations: ["deletePet"],
+          iterations: 2,
+        },
+      };
+
+      fs.writeFileSync(configPath, JSON.stringify(configData, null, 2), "utf-8");
+
+      const exitCode = await runCLI(["--config", configPath]);
+      expect(exitCode).toBe(0);
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("[PASS] Operation: deletePet"));
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("Status: SUCCESS (100% wire parity)"));
+    });
+
     it("returns exit code 2 when config file cannot be loaded", async () => {
       const exitCode = await runCLI(["--config", "/non/existent/config.json"]);
       expect(exitCode).toBe(2);
