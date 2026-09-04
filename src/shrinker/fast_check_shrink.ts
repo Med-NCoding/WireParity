@@ -128,13 +128,16 @@ export async function runOperationParityTest(
   const property = fc.asyncProperty(arbitrary, async (inputs) => {
     try {
       const comp = await predicate(inputs);
+      if (comp.executionError) {
+        if (!initialExecutionError) {
+          initialExecutionError = comp.executionError;
+        }
+        return false; // failure triggers early halt
+      }
       if (comp.hasDivergence) {
         if (!initialFailureCategory && comp.diffs.length > 0) {
           initialFailureCategory = comp.diffs[0]?.category;
           initialFailureDiffs = comp.diffs;
-        }
-        if (!initialExecutionError && comp.executionError) {
-          initialExecutionError = comp.executionError;
         }
         // If user specified a target category, only fail if category matches
         if (options.targetCategory && comp.diffs[0]?.category !== options.targetCategory) {
@@ -188,15 +191,14 @@ export async function runOperationParityTest(
   let finalExecutionError: string | undefined = initialExecutionError;
   let preservedCategory = true;
 
-  if (counterexample) {
+  if (counterexample && !initialExecutionError) {
     try {
       // Run predicate one final time on the minimal counterexample to capture exact diffs
       const finalComp = await predicate(counterexample);
-      if (finalComp.hasDivergence) {
+      if (finalComp.executionError) {
+        finalExecutionError = finalComp.executionError;
+      } else if (finalComp.hasDivergence) {
         finalDiffs = finalComp.diffs;
-        if (finalComp.executionError) {
-          finalExecutionError = finalComp.executionError;
-        }
         if (initialFailureCategory) {
           preservedCategory = finalDiffs.some((d) => d.category === initialFailureCategory);
         }
@@ -214,16 +216,16 @@ export async function runOperationParityTest(
 
   return {
     operationId: operation.id,
-    hasDivergence: true,
+    hasDivergence: finalExecutionError ? false : true,
     executionError: finalExecutionError,
     seed: out.seed,
     path: failOut.counterexamplePath,
     replayToken,
     numRuns: out.numRuns,
     numShrinks: out.numShrinks,
-    diffs: finalDiffs,
-    counterexample,
-    minimizedReproducer: counterexample ? operationInputsToJs(counterexample) : undefined,
+    diffs: finalExecutionError ? [] : finalDiffs,
+    counterexample: finalExecutionError ? undefined : counterexample,
+    minimizedReproducer: finalExecutionError ? undefined : (counterexample ? operationInputsToJs(counterexample) : undefined),
     preservedCategory,
     durationMs,
     error: failOut.error ?? finalExecutionError,

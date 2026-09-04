@@ -32,6 +32,7 @@ export interface ParityReport {
   totalOperations: number;
   passedOperations: number;
   divergentOperations: number;
+  executionErrorOperations?: number;
   results: ParityReportItem[];
 }
 
@@ -82,17 +83,21 @@ export function formatOperationItem(
     return lines.join("\n");
   }
 
+  // Execution Error
+  if (item.executionError) {
+    const badge = colorize("[ERROR]", ANSI.red + ANSI.bold, useColors);
+    const op = colorize(item.operationId, ANSI.bold, useColors);
+    const dur = colorize(`(${item.durationMs}ms)`, ANSI.dim, useColors);
+    lines.push(`\n${badge} Operation: ${op} ${dur}`);
+    lines.push(`  ✖ Execution error: ${item.executionError}`);
+    return lines.join("\n");
+  }
+
   // Failure
-  const badge = item.executionError
-    ? colorize("[ERROR]", ANSI.red + ANSI.bold, useColors)
-    : colorize("[FAIL]", ANSI.red + ANSI.bold, useColors);
+  const badge = colorize("[FAIL]", ANSI.red + ANSI.bold, useColors);
   const op = colorize(item.operationId, ANSI.bold, useColors);
   const dur = colorize(`(${item.durationMs}ms)`, ANSI.dim, useColors);
   lines.push(`\n${badge} Operation: ${op} ${dur}`);
-
-  if (item.executionError) {
-    lines.push(`  ✖ Execution error: ${item.executionError}`);
-  }
 
   const semanticDiffs = item.diffs.filter((d) => d.category !== "RUNNER_EXECUTION_ERROR");
   if (semanticDiffs.length > 0) {
@@ -146,9 +151,20 @@ export function formatTerminalSummary(
   lines.push("\n-------------------------------------------------");
   lines.push(`Summary: ${report.passedOperations}/${report.totalOperations} operations matched.`);
 
-  if (report.divergentOperations > 0) {
+  const errCount = report.executionErrorOperations ?? report.results.filter((r) => !!r.executionError).length;
+  const divCount = report.divergentOperations;
+
+  if (divCount > 0 || errCount > 0) {
+    const parts: string[] = [];
+    if (divCount > 0) {
+      parts.push(`${divCount} divergence(s) detected`);
+    }
+    if (errCount > 0) {
+      parts.push(`${errCount} execution error(s) detected`);
+    }
+
     const statusText = colorize(
-      `Status: FAILED (${report.divergentOperations} divergence(s) detected)`,
+      `Status: FAILED (${parts.join(", ")})`,
       ANSI.red + ANSI.bold,
       useColors
     );

@@ -99,6 +99,7 @@ describe("Machine-Readable JSON Report Output (Step 9.2)", () => {
       totalOperations: 3,
       passedOperations: 3,
       divergentOperations: 0,
+      executionErrorOperations: 0,
       durationMs: 100,
       passRate: 1.0,
     });

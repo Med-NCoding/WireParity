@@ -224,7 +224,8 @@ Options:
       console.log(formatTerminalReport(report));
     }
 
-    return report.divergentOperations > 0 ? 1 : 0;
+    const isFailed = report.divergentOperations > 0 || (report.executionErrorOperations ?? 0) > 0;
+    return isFailed ? 1 : 0;
   } catch (err: unknown) {
     console.error(`Error during suite execution: ${err instanceof Error ? err.message : String(err)}`);
     return 2;

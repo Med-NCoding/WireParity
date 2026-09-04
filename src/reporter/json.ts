@@ -39,7 +39,7 @@ export interface JsonReportReplay {
 
 export interface JsonReportOperation {
   operationId: string;
-  status: "passed" | "failed";
+  status: "passed" | "failed" | "error";
   hasDivergence: boolean;
   executionError?: string;
   durationMs: number;
@@ -53,6 +53,7 @@ export interface JsonReportSummary {
   totalOperations: number;
   passedOperations: number;
   divergentOperations: number;
+  executionErrorOperations?: number;
   durationMs: number;
   passRate: number;
 }
@@ -88,17 +89,25 @@ export function buildJsonReportObject(
 ): StructuredJsonReport {
   const timestamp = options.timestamp ?? new Date().toISOString();
   const totalDuration = report.results.reduce((sum, item) => sum + item.durationMs, 0);
-  const status: "passed" | "failed" = report.divergentOperations === 0 ? "passed" : "failed";
+  const errorCount = report.executionErrorOperations ?? report.results.filter((r) => !!r.executionError).length;
+  const isOverallFailed = report.divergentOperations > 0 || errorCount > 0;
+  const status: "passed" | "failed" = isOverallFailed ? "failed" : "passed";
   const passRate =
     report.totalOperations > 0
       ? Number((report.passedOperations / report.totalOperations).toFixed(4))
       : 1.0;
 
   const operations: JsonReportOperation[] = report.results.map((item) => {
-    const isFailed = item.hasDivergence || !!item.executionError;
-    const opStatus: "passed" | "failed" = isFailed ? "failed" : "passed";
+    let opStatus: "passed" | "failed" | "error";
+    if (item.executionError) {
+      opStatus = "error";
+    } else if (item.hasDivergence) {
+      opStatus = "failed";
+    } else {
+      opStatus = "passed";
+    }
 
-    const divergences: JsonReportDivergence[] = item.diffs.map((diff) => ({
+    const divergences: JsonReportDivergence[] = (item.executionError ? [] : item.diffs).map((diff) => ({
       category: diff.category,
       severity: diff.severity ?? "critical",
       location: diff.location,
@@ -111,7 +120,7 @@ export function buildJsonReportObject(
     }));
 
     let replay: JsonReportReplay | undefined;
-    if (item.seed !== undefined || item.path || item.replayToken) {
+    if (!item.executionError && (item.seed !== undefined || item.path || item.replayToken)) {
       const seedVal = item.seed ?? report.seed;
       replay = {
         seed: seedVal,
@@ -127,12 +136,12 @@ export function buildJsonReportObject(
     return {
       operationId: item.operationId,
       status: opStatus,
-      hasDivergence: item.hasDivergence || !!item.executionError,
+      hasDivergence: !item.executionError && item.hasDivergence,
       durationMs: item.durationMs,
       divergences,
       replay,
-      minimizedReproducer: item.minimizedReproducer,
-      shrinkingSteps: item.shrinkingSteps,
+      minimizedReproducer: item.executionError ? undefined : item.minimizedReproducer,
+      shrinkingSteps: item.executionError ? undefined : item.shrinkingSteps,
       ...(item.executionError ? { executionError: item.executionError } : {}),
     };
   });
@@ -150,6 +159,7 @@ export function buildJsonReportObject(
       totalOperations: report.totalOperations,
       passedOperations: report.passedOperations,
       divergentOperations: report.divergentOperations,
+      executionErrorOperations: errorCount,
       durationMs: totalDuration,
       passRate,
     },
