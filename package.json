@@ -17,7 +17,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "generate:sdks": "bash scripts/generate_sdks.sh"
+    "generate:sdks": "bash scripts/generate_sdks.sh",
+    "wireparity": "node ./dist/cli/bin.js"
   },
   "keywords": [
     "differential-testing",

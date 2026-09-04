@@ -1,0 +1,55 @@
+openapi: 3.0.3
+info:
+  title: Example PetStore API
+  description: Minimal example OpenAPI specification for WireParity differential testing.
+  version: 1.0.0
+servers:
+  - url: http://localhost:9000
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      summary: List all pets
+      parameters:
+        - name: limit
+          in: query
+          description: How many items to return
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: A paged array of pets
+    post:
+      operationId: createPet
+      summary: Create a pet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                tag:
+                  type: string
+      responses:
+        "201":
+          description: Pet created
+  /pets/{petId}:
+    get:
+      operationId: getPetById
+      summary: Info for a specific pet
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          description: The id of the pet to retrieve
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Expected pet response

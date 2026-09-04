@@ -1,0 +1,10 @@
+{
+  "spec": "./spec.yaml",
+  "runners": {
+    "typescript": "node examples/runners/typescript/runner.ts",
+    "python": "python3 examples/runners/python/runner.py"
+  },
+  "options": {
+    "iterations": 3
+  }
+}
