@@ -10,11 +10,11 @@ WireParity verifies that SDKs generated across different programming languages (
 
 WireParity includes runnable runner examples in `examples/runners/` for TypeScript, Python, and Go, paired with an OpenAPI specification in `examples/spec.yaml`.
 
-### 1. Installation & Build
+### 1. Installation 
 
 ```bash
-pnpm install
-pnpm build
+npm install wireparity
+npx wireparity --help
 ```
 
 ### 2. Run with Configuration File
