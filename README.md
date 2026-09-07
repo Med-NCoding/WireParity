@@ -6,9 +6,14 @@ Differential testing tool for multi-language API SDKs.
 
 WireParity verifies that SDKs generated across different programming languages (TypeScript, Python, Go, etc.) emit semantically equivalent HTTP wire requests for identical logical inputs.
 
-## Quick Start & End-to-End Example
+## Quick Start — Use WireParity in Your Project
 
-WireParity includes runnable runner examples in `examples/runners/` for TypeScript, Python, and Go, paired with an OpenAPI specification in `examples/spec.yaml`.
+npm install wireparity
+
+npx wireparity \
+  --spec ./openapi.yaml \
+  --ts "node ./runners/typescript.ts" \
+  --py "python3 ./runners/python.py"
 
 ### 1. Installation 
 
