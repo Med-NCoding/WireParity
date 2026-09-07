@@ -1,6 +1,15 @@
+import fs from "node:fs";
+
 export const APP_NAME = "wireparity";
 export function getVersion(): string {
-  return "0.1.0";
+  try {
+    const pkgUrl = new URL("../package.json", import.meta.url);
+    const pkgContent = fs.readFileSync(pkgUrl, "utf-8");
+    const pkg = JSON.parse(pkgContent) as { version?: string };
+    return pkg.version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
 }
 
 export * from "./capture/types.js";

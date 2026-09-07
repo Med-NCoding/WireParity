@@ -99,6 +99,19 @@ function buildRunner(language: "typescript" | "python" | "go", rawCommand: strin
   return new SubprocessSDKRunner(language, { command, args });
 }
 
+// ─── Package Version Helper ───────────────────────────────────────────────────
+
+function getPackageVersion(): string {
+  try {
+    const pkgUrl = new URL("../../package.json", import.meta.url);
+    const pkgContent = fs.readFileSync(pkgUrl, "utf-8");
+    const pkg = JSON.parse(pkgContent) as { version?: string };
+    return pkg.version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 // ─── Main CLI Runner ──────────────────────────────────────────────────────────
 
 export async function runCLI(argv: string[] = process.argv.slice(2)): Promise<number> {
@@ -137,7 +150,7 @@ Options:
   }
 
   if (options.version) {
-    console.log("wireparity v0.1.0");
+    console.log(`wireparity v${getPackageVersion()}`);
     return 0;
   }
 

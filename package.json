@@ -18,7 +18,16 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "generate:sdks": "bash scripts/generate_sdks.sh",
-    "wireparity": "node ./dist/cli/bin.js"
+    "wireparity": "node ./dist/cli/bin.js",
+    "prepare": "pnpm build",
+    "prepublishOnly": "pnpm build && pnpm typecheck && pnpm test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Med-NCoding/WireParity.git"
+  },
+  "engines": {
+    "node": ">=18.3.0"
   },
   "keywords": [
     "differential-testing",
@@ -26,7 +35,7 @@
     "sdk",
     "wireparity"
   ],
-  "author": "",
+  "author": "Medhansh <medhanshnegi4@gmail.com>",
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^26.2.0",
@@ -38,3 +47,4 @@
     "yaml": "^2.9.0"
   }
 }
+
